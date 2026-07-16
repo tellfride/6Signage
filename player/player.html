@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;cursor:none}
+.slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s}
+.slide.show{opacity:1}
+.slide.cut{transition:none}
+#status{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:#8A93A8;font-family:ui-monospace,Consolas,monospace;font-size:18px;text-align:center;padding:40px}
+#status .tv{width:76px;height:56px;border:3px solid #5B8CFF;border-radius:8px;position:relative;opacity:.9}
+#status .tv::after{content:'';position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);
+  width:30px;height:4px;background:#5B8CFF;border-radius:3px}
+#status .tv i{position:absolute;right:6px;bottom:6px;width:9px;height:9px;border-radius:50%;
+  background:#3DDC97;box-shadow:0 0 10px #3DDC97;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.35}}
+#status small{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#4A5468}
+</style>
+</head>
+<body>
+<div id="statusWrap">
+  <div id="status"><div class="tv"><i></i></div><span id="statusText">Conectando ao servidor…</span>
+  <small>6Signage Player · Ctrl+Shift+S configura · Ctrl+Shift+Q sai</small></div>
+</div>
+<script>
+let cfg, manifest = { items: [] }, idx = 0, timer = null, current = null, paused = false;
+const status = document.getElementById('statusWrap');
+const statusText = document.getElementById('statusText');
+
+async function register() {
+  const r = await fetch(cfg.server + '/api/devices/register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      device_key: cfg.deviceKey, device_name: cfg.deviceName,
+      resolution: `${screen.width}x${screen.height}`,
+      os_version: navigator.platform, client_version: '0.1.0'
+    })
+  });
+  return r.json();
+}
+
+async function syncManifest() {
+  try {
+    const r = await fetch(`${cfg.server}/api/player/manifest?device_key=${cfg.deviceKey}`);
+    const m = await r.json();
+    const changed = JSON.stringify(m.items) !== JSON.stringify(manifest.items);
+    manifest = m;
+    if (!m.items.length) {
+      statusText.textContent = m.playlist ? 'Playlist vazia — adicione mídias no painel' : 'Tela registrada — aguardando aprovação no painel';
+      status.style.display = 'flex';
+      stopPlayback();
+    } else if (changed) {
+      status.style.display = 'none';
+      // pré-baixa tudo antes de (re)começar
+      for (const it of m.items) {
+        try { it.localUrl = await window.signage.cacheMedia({ url: it.url, checksum: it.checksum }); }
+        catch (e) { console.error(e); it.localUrl = cfg.server + it.url; } // fallback: direto do servidor
+      }
+      idx = 0; play();
+    }
+  } catch (e) {
+    statusText.textContent = 'Sem conexão — executando cache local';
+    console.error(e);
+  }
+}
+
+function stopPlayback() {
+  clearTimeout(timer);
+  if (current) { current.remove(); current = null; }
+}
+
+function play() {
+  if (paused || !manifest.items.length) return;
+  clearTimeout(timer);
+  const it = manifest.items[idx % manifest.items.length];
+  const old = current;
+  let el;
+  if (it.file_type === 'video') {
+    el = document.createElement('video');
+    el.src = it.localUrl; el.autoplay = true; el.muted = false;
+    el.onended = next;
+    el.onerror = () => { console.error('erro vídeo', it.url); setTimeout(next, 2000); };
+  } else {
+    el = document.createElement('img');
+    el.src = it.localUrl;
+    timer = setTimeout(next, (it.duration || 10) * 1000);
+  }
+  el.className = 'slide' + (it.transition_type === 'cut' ? ' cut' : '');
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  if (old) { old.classList.remove('show'); setTimeout(() => old.remove(), 700); }
+  current = el;
+  window._currentName = it.url.split('/').pop();
+}
+
+function next() { idx++; play(); }
+
+function heartbeat() {
+  fetch(cfg.server + '/api/player/heartbeat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_key: cfg.deviceKey, status: 'online', current_media: window._currentName || null })
+  }).catch(() => {});
+}
+
+function connectWS() {
+  const wsUrl = cfg.server.replace(/^http/, 'ws') + '/ws?device_key=' + cfg.deviceKey;
+  const ws = new WebSocket(wsUrl);
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'manifest_updated') syncManifest();
+    if (msg.type === 'command') {
+      if (msg.command === 'next') next();
+      if (msg.command === 'pause') { paused = true; clearTimeout(timer); if (current && current.pause) current.pause(); }
+      if (msg.command === 'play') { paused = false; if (current && current.play) current.play(); else play(); }
+      if (msg.command === 'restart_player') location.reload();
+    }
+  };
+  ws.onclose = () => setTimeout(connectWS, 5000);
+}
+
+(async () => {
+  cfg = await window.signage.getConfig();
+  try { await register(); } catch { statusText.textContent = 'Servidor inacessível: ' + cfg.server; }
+  connectWS();
+  await syncManifest();
+  setInterval(syncManifest, 60000);  // polling de fallback
+  setInterval(heartbeat, 30000);
+  heartbeat();
+})();
+</script>
+</body>
+</html>

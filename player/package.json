@@ -1,0 +1,23 @@
+{
+  "name": "6signage-player",
+  "version": "0.1.0",
+  "description": "6Signage Player - cliente Windows para TVs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "local.sixsignage.player",
+    "win": { "target": "nsis", "signAndEditExecutable": false },
+    "nsis": {
+      "oneClick": true,
+      "runAfterFinish": true,
+      "artifactName": "6SignagePlayer-Setup-${version}.${ext}"
+    }
+  }
+}

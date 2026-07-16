@@ -1,0 +1,19 @@
+# Dependências
+node_modules/
+
+# Banco de dados e mídia enviada (dados de runtime, não versionar)
+server/6signage.db*
+server/media/*
+!server/media/.gitkeep
+
+# Artefatos de build (anexar nas Releases do GitHub, não no repositório)
+server/downloads/
+player/dist/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+
+# Diversos
+*.log
+.DS_Store
