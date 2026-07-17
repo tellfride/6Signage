@@ -36,6 +36,22 @@ function auth(req, res, next) {
   }
 }
 
+// Exige um dos papéis informados (viewer é somente leitura)
+function requireRole(...roles) {
+  return (req, res, next) =>
+    roles.includes(req.user.role) ? next()
+      : res.status(403).json({ error: 'Sem permissão para esta ação' });
+}
+const canWrite = requireRole('admin', 'manager');
+const adminOnly = requireRole('admin');
+
+// Grupos em que o usuário pode publicar (admin: todos)
+function allowedGroups(user) {
+  if (user.role === 'admin') return null; // null = sem restrição
+  return db.prepare('SELECT group_id FROM user_groups WHERE user_id = ?')
+    .all(user.id).map(r => r.group_id);
+}
+
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body || {};
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
@@ -43,6 +59,55 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Credenciais inválidas' });
   const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
   res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
+});
+
+// ---------- Usuários (somente admin) ----------
+app.get('/api/users', auth, adminOnly, (req, res) => {
+  const users = db.prepare('SELECT id, email, role, created_at FROM users ORDER BY email').all();
+  for (const u of users) {
+    u.groups = db.prepare(`SELECT g.id, g.name FROM user_groups ug
+                           JOIN device_groups g ON g.id = ug.group_id
+                           WHERE ug.user_id = ?`).all(u.id);
+  }
+  res.json(users);
+});
+
+app.post('/api/users', auth, adminOnly, (req, res) => {
+  const { email, password, role, group_ids } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
+  if (!['admin', 'manager', 'viewer'].includes(role)) return res.status(400).json({ error: 'Papel inválido' });
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email))
+    return res.status(409).json({ error: 'Já existe um usuário com este e-mail' });
+  const id = uuid();
+  db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?,?,?,?)')
+    .run(id, email, bcrypt.hashSync(password, 10), role);
+  const ins = db.prepare('INSERT INTO user_groups (user_id, group_id) VALUES (?,?)');
+  (group_ids || []).forEach(g => ins.run(id, g));
+  res.status(201).json({ id, email, role });
+});
+
+app.put('/api/users/:id', auth, adminOnly, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
+  const { role, password, group_ids } = req.body || {};
+  if (role && u.id === req.user.id && role !== 'admin')
+    return res.status(400).json({ error: 'Você não pode rebaixar o próprio papel' });
+  if (role) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, u.id);
+  if (password) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+    .run(bcrypt.hashSync(password, 10), u.id);
+  if (Array.isArray(group_ids)) {
+    db.prepare('DELETE FROM user_groups WHERE user_id = ?').run(u.id);
+    const ins = db.prepare('INSERT INTO user_groups (user_id, group_id) VALUES (?,?)');
+    group_ids.forEach(g => ins.run(u.id, g));
+  }
+  res.json({ ok: true });
+});
+
+app.delete('/api/users/:id', auth, adminOnly, (req, res) => {
+  if (req.params.id === req.user.id)
+    return res.status(400).json({ error: 'Você não pode excluir a si mesmo' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
 });
 
 // ---------- Mídia ----------
@@ -62,7 +127,7 @@ app.get('/api/media', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM media ORDER BY uploaded_at DESC').all());
 });
 
-app.post('/api/media/upload', auth, upload.single('file'), (req, res) => {
+app.post('/api/media/upload', auth, canWrite, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
   const isVideo = /\.(mp4|mkv|webm)$/i.test(req.file.filename);
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(req.file.path)).digest('hex');
@@ -74,7 +139,7 @@ app.post('/api/media/upload', auth, upload.single('file'), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM media WHERE id = ?').get(id));
 });
 
-app.delete('/api/media/:id', auth, (req, res) => {
+app.delete('/api/media/:id', auth, canWrite, (req, res) => {
   const m = db.prepare('SELECT * FROM media WHERE id = ?').get(req.params.id);
   if (!m) return res.status(404).json({ error: 'Não encontrado' });
   const abs = path.join(MEDIA_DIR, path.basename(m.file_path));
@@ -95,7 +160,7 @@ app.get('/api/playlists', auth, (req, res) => {
   res.json(lists);
 });
 
-app.post('/api/playlists', auth, (req, res) => {
+app.post('/api/playlists', auth, canWrite, (req, res) => {
   const { name, description } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
   const id = uuid();
@@ -104,7 +169,7 @@ app.post('/api/playlists', auth, (req, res) => {
 });
 
 // Substitui todos os itens da playlist (ordem enviada = ordem final)
-app.put('/api/playlists/:id/items', auth, (req, res) => {
+app.put('/api/playlists/:id/items', auth, canWrite, (req, res) => {
   const p = db.prepare('SELECT id FROM playlists WHERE id = ?').get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Playlist não encontrada' });
   const items = req.body.items || [];
@@ -122,16 +187,23 @@ app.put('/api/playlists/:id/items', auth, (req, res) => {
   res.json({ ok: true, count: items.length });
 });
 
-app.delete('/api/playlists/:id', auth, (req, res) => {
+app.delete('/api/playlists/:id', auth, canWrite, (req, res) => {
   db.prepare('UPDATE devices SET playlist_id = NULL WHERE playlist_id = ?').run(req.params.id);
   db.prepare('DELETE FROM playlists WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
 // Atribuir playlist a dispositivo ou grupo
-app.post('/api/playlists/:id/assign', auth, (req, res) => {
+app.post('/api/playlists/:id/assign', auth, canWrite, (req, res) => {
   const { device_id, group_id } = req.body || {};
   if (!device_id && !group_id) return res.status(400).json({ error: 'Informe device_id ou group_id' });
+  const allowed = allowedGroups(req.user);
+  if (allowed) { // manager: valida permissão de publicação no grupo
+    const target = group_id ||
+      (db.prepare('SELECT group_id FROM devices WHERE id = ?').get(device_id) || {}).group_id;
+    if (!target || !allowed.includes(target))
+      return res.status(403).json({ error: 'Você não tem permissão para publicar neste grupo' });
+  }
   if (device_id) {
     db.prepare('UPDATE devices SET playlist_id = ? WHERE id = ?').run(req.params.id, device_id);
     notifyDevice(device_id);
@@ -146,14 +218,14 @@ app.post('/api/playlists/:id/assign', auth, (req, res) => {
 app.get('/api/groups', auth, (req, res) =>
   res.json(db.prepare('SELECT * FROM device_groups ORDER BY name').all()));
 
-app.post('/api/groups', auth, (req, res) => {
+app.post('/api/groups', auth, adminOnly, (req, res) => {
   const id = uuid();
   db.prepare('INSERT INTO device_groups (id, name, description) VALUES (?,?,?)')
     .run(id, req.body.name, req.body.description || null);
   res.status(201).json(db.prepare('SELECT * FROM device_groups WHERE id = ?').get(id));
 });
 
-app.delete('/api/groups/:id', auth, (req, res) => {
+app.delete('/api/groups/:id', auth, adminOnly, (req, res) => {
   db.prepare('DELETE FROM device_groups WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -170,7 +242,7 @@ app.get('/api/devices', auth, (req, res) => {
     ORDER BY d.name`).all());
 });
 
-app.put('/api/devices/:id', auth, (req, res) => {
+app.put('/api/devices/:id', auth, canWrite, (req, res) => {
   const { name, location, group_id, approved } = req.body || {};
   db.prepare(`UPDATE devices SET
       name = COALESCE(?, name), location = COALESCE(?, location),
@@ -181,12 +253,12 @@ app.put('/api/devices/:id', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id));
 });
 
-app.delete('/api/devices/:id', auth, (req, res) => {
+app.delete('/api/devices/:id', auth, adminOnly, (req, res) => {
   db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
-app.post('/api/devices/:id/command', auth, (req, res) => {
+app.post('/api/devices/:id/command', auth, canWrite, (req, res) => {
   const sent = sendToDevice(req.params.id, { type: 'command', command: req.body.command });
   res.json({ ok: sent, delivered: sent });
 });

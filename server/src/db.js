@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS playlist_items (
   transition_type TEXT DEFAULT 'fade' CHECK (transition_type IN ('fade','slide','cut'))
 );
 
+-- Permissões: em quais grupos um usuário 'manager' pode publicar
+CREATE TABLE IF NOT EXISTS user_groups (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, group_id)
+);
+
 CREATE TABLE IF NOT EXISTS execution_logs (
   id TEXT PRIMARY KEY,
   device_id TEXT REFERENCES devices(id) ON DELETE CASCADE,

@@ -8,175 +8,206 @@
 :root{
   --bg:#0B0E14; --panel:#121826; --panel2:#0E1420; --line:#232D42;
   --text:#E8ECF4; --mut:#8A93A8; --faint:#4A5468;
-  --acc:#5B8CFF; --acc-dim:#2B3F6E; --ok:#3DDC97; --err:#FF6B6B; --warn:#FFB84D;
+  --acc:#5B8CFF; --acc2:#8B5CF6; --nav-bg:#2B3F6E; --nav-fg:#FFFFFF;
+  --ok:#3DDC97; --err:#FF6B6B; --warn:#FFB84D;
+  --ok-bg:rgba(61,220,151,.12); --err-bg:rgba(255,107,107,.10); --warn-bg:rgba(255,184,77,.12);
+  --shadow:0 10px 34px -14px rgba(0,0,0,.55);
   --mono:ui-monospace,'Cascadia Mono','Consolas','Menlo',monospace;
-  --radius:12px;
+  --radius:14px;
+}
+html[data-theme="light"]{
+  --bg:#EEF1F7; --panel:#FFFFFF; --panel2:#F8FAFD; --line:#DFE5F0;
+  --text:#17202F; --mut:#5B6678; --faint:#94A0B4;
+  --acc:#3E6DE8; --acc2:#7A4DE8; --nav-bg:#E4EBFC; --nav-fg:#2C55C4;
+  --ok:#0EA96B; --err:#DD4E4E; --warn:#B97E0C;
+  --ok-bg:rgba(14,169,107,.10); --err-bg:rgba(221,78,78,.09); --warn-bg:rgba(185,126,12,.10);
+  --shadow:0 10px 30px -18px rgba(23,32,47,.25);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .25s,color .25s}
 button{font-family:inherit}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
-::selection{background:var(--acc-dim)}
 
 /* ---------- marca ---------- */
-.tvmark{width:30px;height:22px;border:2px solid var(--acc);border-radius:4px;position:relative;flex-shrink:0}
-.tvmark::after{content:'';position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:12px;height:2px;background:var(--acc);border-radius:2px}
-.tvmark i{position:absolute;right:2px;bottom:2px;width:4px;height:4px;border-radius:50%;background:var(--ok);box-shadow:0 0 5px var(--ok)}
+.tvmark{width:32px;height:24px;border-radius:6px;position:relative;flex-shrink:0;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));padding:2px}
+.tvmark s{display:block;width:100%;height:100%;background:var(--panel2);border-radius:4px;position:relative}
+.tvmark i{position:absolute;right:4px;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--ok);box-shadow:0 0 5px var(--ok)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:.3px}
 .eyebrow{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:2px;color:var(--faint)}
 
 /* ---------- login ---------- */
-#login{max-width:380px;margin:16vh auto 0;padding:0 20px;display:flex;flex-direction:column;gap:14px}
-#login .brand{justify-content:center;margin-bottom:2px;font-size:20px}
-#login .eyebrow{text-align:center;margin-bottom:22px}
-#login input{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:13px 15px;border-radius:10px;font-size:15px;width:100%}
-#login input:focus{border-color:var(--acc);outline:none;box-shadow:0 0 0 3px rgba(91,140,255,.14)}
-#login .btn{padding:13px}
+#login{max-width:392px;margin:14vh auto 0;padding:34px 30px 30px;display:flex;flex-direction:column;gap:14px;
+  background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);position:relative}
+#login::before{content:'';position:absolute;inset:-1px;border-radius:20px;padding:1px;z-index:-1;
+  background:linear-gradient(135deg,var(--acc),transparent 40%,transparent 60%,var(--acc2))}
+#login .brand{justify-content:center;margin-bottom:2px;font-size:21px}
+#login .eyebrow{text-align:center;margin-bottom:20px}
+#login input{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:13px 15px;border-radius:11px;font-size:15px;width:100%}
+#login input:focus{border-color:var(--acc);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 18%,transparent)}
 #lerr{font-family:var(--mono);font-size:12.5px;color:var(--err);min-height:18px;text-align:center}
 
-/* ---------- casca do app ---------- */
+/* ---------- casca ---------- */
 #app{display:none}
-#app.on{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
+#app.on{display:grid;grid-template-columns:224px 1fr;min-height:100vh}
 aside{background:var(--panel2);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:26px;position:sticky;top:0;height:100vh}
-aside nav{display:flex;flex-direction:column;gap:3px}
-aside nav button{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border:0;border-radius:9px;background:transparent;color:var(--mut);font-size:14px;cursor:pointer;text-align:left}
+aside nav{display:flex;flex-direction:column;gap:4px}
+aside nav button{display:flex;align-items:center;gap:11px;width:100%;padding:11px 13px;border:0;border-radius:11px;background:transparent;color:var(--mut);font-size:14px;cursor:pointer;text-align:left;transition:background .15s,color .15s}
 aside nav button svg{width:17px;height:17px;flex-shrink:0}
-aside nav button:hover{color:var(--text);background:rgba(255,255,255,.03)}
-aside nav button.active{background:var(--acc-dim);color:#fff}
-.userbox{margin-top:auto;border-top:1px solid var(--line);padding-top:14px;font-size:12.5px;color:var(--mut);display:flex;flex-direction:column;gap:8px}
+aside nav button:hover{color:var(--text);background:color-mix(in srgb,var(--text) 5%,transparent)}
+aside nav button.active{background:var(--nav-bg);color:var(--nav-fg);font-weight:600}
+.userbox{margin-top:auto;border-top:1px solid var(--line);padding-top:14px;font-size:12.5px;color:var(--mut);display:flex;flex-direction:column;gap:9px}
 .userbox b{color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis}
-main{padding:26px clamp(16px,3.5vw,40px) 90px;max-width:1180px;width:100%}
-.pagehead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.pagehead h2{font-size:21px;font-weight:700;letter-spacing:.2px}
+.userbox .row{justify-content:space-between}
+main{padding:28px clamp(16px,3.5vw,42px) 96px;max-width:1220px;width:100%}
+.pagehead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+.pagehead h2{font-size:22px;font-weight:750;letter-spacing:.2px}
 #topbar{display:none}
 
-/* ---------- painel de estatísticas ---------- */
-.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:13px 18px;min-width:128px;flex:1;max-width:200px}
-.stat .k{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1.6px;color:var(--faint);margin-bottom:5px}
-.stat .v{font-family:var(--mono);font-size:22px;font-weight:600}
+/* ---------- stats ---------- */
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 19px;min-width:132px;flex:1;max-width:210px;box-shadow:var(--shadow)}
+.stat .k{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1.6px;color:var(--faint);margin-bottom:6px}
+.stat .v{font-family:var(--mono);font-size:23px;font-weight:650}
 .stat .v em{font-style:normal;font-size:13px;color:var(--mut)}
 .stat.ok .v{color:var(--ok)} .stat.warn .v{color:var(--warn)}
 
-/* ---------- video wall (cards de TV) ---------- */
-.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:16px}
-.tvcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;transition:box-shadow .3s,border-color .3s}
-.tvcard.online{border-color:#1E4A38;box-shadow:0 0 22px -6px rgba(61,220,151,.18)}
-.screen{aspect-ratio:16/9;background:linear-gradient(160deg,#05070C 0%,#0A0F1A 100%);position:relative;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line)}
+/* ---------- video wall ---------- */
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px}
+.tvcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);transition:transform .2s,border-color .3s}
+.tvcard:hover{transform:translateY(-2px)}
+.tvcard.online{border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+.screen{aspect-ratio:16/9;background:linear-gradient(160deg,#05070C,#0A0F1A);position:relative;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line)}
 .screen::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(255,255,255,.012) 3px 4px);pointer-events:none}
-.screen .now{font-family:var(--mono);font-size:12px;color:var(--mut);text-align:center;padding:0 18px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.screen .now b{display:block;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--faint);margin-bottom:6px;font-weight:500}
-.screen .now.playing{color:var(--ok)}
+.screen .now{font-family:var(--mono);font-size:12px;color:#8A93A8;text-align:center;padding:0 18px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen .now b{display:block;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#4A5468;margin-bottom:6px;font-weight:500}
+.screen .now.playing{color:#3DDC97}
 .led{position:absolute;right:10px;bottom:8px;width:7px;height:7px;border-radius:50%}
-.led.on{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 2s infinite}
+.led.on{background:#3DDC97;box-shadow:0 0 8px #3DDC97;animation:pulse 2s infinite}
 .led.off{background:#3A4356}
 @keyframes pulse{50%{opacity:.4}}
-@media (prefers-reduced-motion: reduce){.led.on{animation:none}}
-.tvbody{padding:13px 15px 15px;display:flex;flex-direction:column;gap:10px}
+@media (prefers-reduced-motion: reduce){.led.on{animation:none}.tvcard:hover{transform:none}}
+.tvbody{padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px}
 .tvtitle{display:flex;align-items:center;gap:8px;justify-content:space-between}
-.tvtitle .nm{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tvtitle .nm{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tvmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.4px;display:flex;gap:10px;flex-wrap:wrap}
-.tvrow{display:flex;gap:7px}
+.tvrow{display:flex;gap:8px}
 .tvrow select{flex:1;min-width:0}
-.tvactions{display:flex;gap:7px}
-.pill{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:1.2px;padding:3px 9px;border-radius:99px;flex-shrink:0}
-.pill.on{background:rgba(61,220,151,.12);color:var(--ok)}
-.pill.off{background:rgba(255,107,107,.10);color:var(--err)}
-.pill.wait{background:rgba(255,184,77,.12);color:var(--warn)}
+.tvactions{display:flex;gap:8px}
+.pill{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:1.2px;padding:3px 10px;border-radius:99px;flex-shrink:0;font-weight:600}
+.pill.on{background:var(--ok-bg);color:var(--ok)}
+.pill.off{background:var(--err-bg);color:var(--err)}
+.pill.wait{background:var(--warn-bg);color:var(--warn)}
+.pill.role-admin{background:var(--err-bg);color:var(--err)}
+.pill.role-manager{background:var(--ok-bg);color:var(--ok)}
+.pill.role-viewer{background:var(--warn-bg);color:var(--warn)}
 
 /* ---------- componentes ---------- */
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
-.card h3{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:19px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h3{font-size:15px;font-weight:650;margin-bottom:14px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
 .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
-input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:9px;font-size:13.5px;min-width:0}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:10px;font-size:13.5px;min-width:0}
 input:focus,select:focus{border-color:var(--acc);outline:none}
 input.grow{flex:1;min-width:150px}
-.btn{background:var(--acc);color:#fff;border:0;padding:10px 16px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap}
-.btn:hover{filter:brightness(1.1)}
-.btn.sm{padding:8px 12px;font-size:12.5px}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--mut);font-weight:500}
+.btn{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;border:0;padding:10px 17px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:filter .15s}
+.btn:hover{filter:brightness(1.12)}
+.btn.sm{padding:8px 13px;font-size:12.5px}
+.btn.ghost{background:var(--panel);border:1px solid var(--line);color:var(--mut);font-weight:500}
 .btn.ghost:hover{color:var(--text);border-color:var(--mut);filter:none}
-.btn.danger{background:transparent;border:1px solid rgba(255,107,107,.35);color:var(--err);font-weight:500}
-.btn.danger:hover{background:rgba(255,107,107,.1);filter:none}
-.btn.approve{background:var(--ok);color:#06281B}
-.list .item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);font-size:13.5px}
+.btn.danger{background:var(--panel);border:1px solid color-mix(in srgb,var(--err) 40%,transparent);color:var(--err);font-weight:500}
+.btn.danger:hover{background:var(--err-bg);filter:none}
+.btn.approve{background:linear-gradient(135deg,var(--ok),#0EA96B);color:#fff}
+.list .item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:13.5px;flex-wrap:wrap}
 .list .item:last-child{border-bottom:0}
-.item .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.item .grow{flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis}
 .sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px;letter-spacing:.3px}
-.thumb{width:64px;height:40px;object-fit:cover;border-radius:6px;background:#05070C;border:1px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:16px}
+.thumb{width:64px;height:40px;object-fit:cover;border-radius:8px;background:#05070C;border:1px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#4A5468;font-size:16px}
 .pos{font-family:var(--mono);font-size:11px;color:var(--faint);width:22px;text-align:right;flex-shrink:0}
-.icobtn{background:transparent;border:1px solid var(--line);color:var(--mut);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:13px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center}
+.icobtn{background:var(--panel);border:1px solid var(--line);color:var(--mut);width:33px;height:33px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center}
 .icobtn:hover{color:var(--text);border-color:var(--mut)}
 .icobtn.del:hover{color:var(--err);border-color:var(--err)}
-.empty{padding:36px 20px;text-align:center;color:var(--mut);font-size:13.5px;line-height:1.7}
+.empty{padding:38px 20px;text-align:center;color:var(--mut);font-size:13.5px;line-height:1.7}
 .empty .eyebrow{margin-bottom:8px}
+.chip{display:inline-block;font-size:11px;padding:3px 10px;border-radius:99px;background:var(--nav-bg);color:var(--nav-fg);margin:2px 3px 2px 0;font-weight:500}
+.checks{display:flex;gap:6px 14px;flex-wrap:wrap;padding:10px 2px}
+.checks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);cursor:pointer}
+.checks input{accent-color:var(--acc);width:15px;height:15px}
 
 /* ---------- upload ---------- */
-.drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:34px 20px;text-align:center;color:var(--mut);font-size:13.5px;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:16px}
-.drop:hover,.drop.over{border-color:var(--acc);background:rgba(91,140,255,.05)}
+.drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:36px 20px;text-align:center;color:var(--mut);font-size:13.5px;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:16px;background:var(--panel)}
+.drop:hover,.drop.over{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 5%,var(--panel))}
 .drop b{color:var(--text)}
 .drop .sub{margin-top:6px}
-.mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.mcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.mcard .mthumb{aspect-ratio:16/9;background:#05070C;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:22px}
+.mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.mcard .mthumb{aspect-ratio:16/9;background:#05070C;display:flex;align-items:center;justify-content:center;color:#4A5468;font-size:22px}
 .mcard .mthumb img{width:100%;height:100%;object-fit:cover}
 .mcard .minfo{padding:9px 11px;display:flex;align-items:center;gap:6px}
-.mcard .minfo .grow{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcard .minfo .grow{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .mcard .sub{margin-top:2px}
 
 /* ---------- toasts ---------- */
-#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:100;width:min(92vw,420px)}
-.toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:10px;padding:12px 16px;font-size:13.5px;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:up .25s}
+#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:100;width:min(92vw,430px)}
+.toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:11px;padding:12px 16px;font-size:13.5px;box-shadow:var(--shadow);animation:up .25s}
 .toast.ok{border-left-color:var(--ok)} .toast.err{border-left-color:var(--err)}
 @keyframes up{from{opacity:0;transform:translateY(8px)}}
 @media (prefers-reduced-motion: reduce){.toast{animation:none}}
 
 /* ---------- mobile ---------- */
-@media(max-width:880px){
+@media(max-width:900px){
   #app.on{display:block}
   aside{display:none}
   #topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--panel2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-  main{padding:18px 14px 96px}
+  #topbar .row{gap:8px}
+  main{padding:18px 14px 100px}
   #tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel2);border-top:1px solid var(--line);z-index:20;padding-bottom:env(safe-area-inset-bottom)}
-  #tabbar button{flex:1;padding:9px 4px 11px;border:0;background:transparent;color:var(--faint);font-size:10.5px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px}
+  #tabbar button{flex:1;padding:9px 2px 11px;border:0;background:transparent;color:var(--faint);font-size:10px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-family:var(--mono);text-transform:uppercase;letter-spacing:.6px}
   #tabbar button svg{width:19px;height:19px}
   #tabbar button.active{color:var(--acc)}
-  .stats{gap:8px}.stat{min-width:100px;padding:11px 13px}.stat .v{font-size:18px}
+  .stats{gap:8px}.stat{min-width:98px;padding:11px 13px}.stat .v{font-size:18px}
   .wall{grid-template-columns:1fr}
+  #login{margin-top:8vh}
 }
-@media(min-width:881px){#tabbar{display:none}}
+@media(min-width:901px){#tabbar{display:none}}
 .hidden{display:none!important}
 </style>
 </head>
 <body>
 
 <div id="login">
-  <div class="brand"><div class="tvmark"><i></i></div>6Signage</div>
+  <div class="brand"><div class="tvmark"><s><i></i></s></div>6Signage</div>
   <div class="eyebrow">Painel de controle de telas</div>
   <input id="lemail" type="email" placeholder="E-mail" autocomplete="username">
   <input id="lpass" type="password" placeholder="Senha" autocomplete="current-password">
-  <button class="btn" onclick="login()">Entrar</button>
+  <button class="btn" onclick="login()" style="padding:13px">Entrar</button>
   <div id="lerr"></div>
 </div>
 
 <div id="app">
   <aside>
-    <div class="brand"><div class="tvmark"><i></i></div>6Signage</div>
+    <div class="brand"><div class="tvmark"><s><i></i></s></div>6Signage</div>
     <nav id="sidenav"></nav>
-    <div class="userbox"><b id="uemail"></b>
-      <button class="btn ghost sm" onclick="logout()">Sair</button></div>
+    <div class="userbox"><b id="uemail"></b><span id="urole" class="eyebrow"></span>
+      <div class="row">
+        <button class="icobtn themeBtn" onclick="toggleTheme()" title="Alternar tema">☀</button>
+        <button class="btn ghost sm" style="flex:1" onclick="logout()">Sair</button>
+      </div></div>
   </aside>
   <div>
     <div id="topbar">
-      <div class="brand"><div class="tvmark"><i></i></div>6Signage</div>
-      <button class="btn ghost sm" onclick="logout()">Sair</button>
+      <div class="brand"><div class="tvmark"><s><i></i></s></div>6Signage</div>
+      <div class="row">
+        <button class="icobtn themeBtn" onclick="toggleTheme()" title="Alternar tema">☀</button>
+        <button class="btn ghost sm" onclick="logout()">Sair</button>
+      </div>
     </div>
     <main>
       <section id="tab-devices"></section>
       <section id="tab-playlists" class="hidden"></section>
       <section id="tab-media" class="hidden"></section>
       <section id="tab-groups" class="hidden"></section>
+      <section id="tab-users" class="hidden"></section>
     </main>
   </div>
 </div>
@@ -187,28 +218,42 @@ input.grow{flex:1;min-width:150px}
 let token = localStorage.getItem('token');
 const $ = s => document.querySelector(s);
 const esc = s => (s??'').toString().replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ROLE_LABEL = {admin:'Administrador', manager:'Editor', viewer:'Visualizador'};
+
+/* ---------- tema ---------- */
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('theme', t);
+  document.querySelectorAll('.themeBtn').forEach(b=>{b.textContent = t==='light'?'🌙':'☀';});
+}
+applyTheme(localStorage.getItem('theme') ||
+  (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+function toggleTheme(){
+  applyTheme(document.documentElement.dataset.theme==='light' ? 'dark' : 'light');
+}
 
 const ICONS = {
   devices:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
   playlists:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h13M3 12h13M3 18h9"/><path d="M19 10v8m0-8 3 2m-3-2-3 2" stroke-linecap="round"/></svg>',
   media:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>',
-  groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>'
+  groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 11a3 3 0 1 0-2-5.2M17 15c3 0 5 1.6 5 5"/></svg>'
 };
-const TABS = [
-  ['devices','Telas'], ['playlists','Playlists'], ['media','Mídia'], ['groups','Grupos']
-];
 
-function toast(msg, kind='') {
-  const el = document.createElement('div');
-  el.className = 'toast ' + kind;
-  el.textContent = msg;
-  $('#toasts').appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+function userRole(){
+  try { return JSON.parse(atob(token.split('.')[1])).role } catch { return 'viewer' }
 }
 
-async function api(path, opts={}) {
+function toast(msg, kind=''){
+  const el = document.createElement('div');
+  el.className='toast '+kind; el.textContent=msg;
+  $('#toasts').appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+async function api(path, opts={}){
   opts.headers = Object.assign({'Authorization':'Bearer '+token}, opts.headers||{});
-  if (opts.body && !(opts.body instanceof FormData)) {
+  if (opts.body && !(opts.body instanceof FormData)){
     opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.body);
   }
   const r = await fetch('/api'+path, opts);
@@ -233,13 +278,16 @@ function logout(){localStorage.removeItem('token');token=null;location.reload()}
 $('#lpass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 
 function navHtml(){
-  return TABS.map(([id,label])=>
+  const tabs = [['devices','Telas'],['playlists','Playlists'],['media','Mídia'],['groups','Grupos']];
+  if (userRole()==='admin') tabs.push(['users','Usuários']);
+  return tabs.map(([id,label])=>
     `<button data-tab="${id}" onclick="tab('${id}')">${ICONS[id]}<span>${label}</span></button>`).join('');
 }
 function boot(){
   $('#login').classList.add('hidden');
   $('#app').classList.add('on');
   $('#uemail').textContent = localStorage.getItem('email')||'';
+  $('#urole').textContent = ROLE_LABEL[userRole()]||'';
   $('#sidenav').innerHTML = navHtml();
   $('#tabbar').innerHTML = navHtml();
   tab('devices');
@@ -250,7 +298,7 @@ function tab(name){
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
   $('#tab-'+name).classList.remove('hidden');
-  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups})[name]();
+  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups,users:loadUsers})[name]();
 }
 
 /* ================= TELAS ================= */
@@ -307,20 +355,19 @@ async function loadDevices(silent){
       </div>
     </div>`}).join('')+`</div>`
     : `<div class="card"><div class="empty"><div class="eyebrow">Nenhuma tela conectada</div>
-       Baixe o agente abaixo, instale no computador Windows da TV e informe o endereço deste servidor.<br>
+       Baixe o agente abaixo, instale no computador da TV e informe o endereço deste servidor.<br>
        A tela aparecerá aqui automaticamente para aprovação.</div></div>`;
 
   $('#tab-devices').innerHTML =
     `<div class="pagehead"><h2>Telas</h2>
-      <span class="row" style="gap:14px"><a class="btn ghost sm" style="text-decoration:none" href="/downloads/6SignagePlayer-win64.zip" download>⬇ Agente Windows</a>
-      <a class="btn ghost sm" style="text-decoration:none" href="/downloads/6SignagePlayer.apk" download>⬇ Agente Android</a>
-      <span class="eyebrow">atualiza a cada 15 s</span></span></div>`+stats+wall;
+      <span class="row"><a class="btn ghost sm" style="text-decoration:none" href="/downloads/6SignagePlayer-win64.zip" download>⬇ Agente Windows</a>
+      <a class="btn ghost sm" style="text-decoration:none" href="/downloads/6SignagePlayer.apk" download>⬇ Agente Android</a></span></div>`+stats+wall;
 }
-const approveDev = id => api('/devices/'+id,{method:'PUT',body:{approved:true}}).then(()=>{toast('Tela aprovada','ok');loadDevices()});
-const setGroup   = (id,g) => api('/devices/'+id,{method:'PUT',body:{group_id:g||null}}).then(()=>loadDevices(true));
-const assignPl   = (pl,dev) => pl && api('/playlists/'+pl+'/assign',{method:'POST',body:{device_id:dev}}).then(()=>{toast('Playlist atribuída — a tela vai atualizar em instantes','ok');loadDevices(true)});
-const cmd        = (id,c) => api('/devices/'+id+'/command',{method:'POST',body:{command:c}}).then(r=>toast(r.delivered?'Comando enviado':'Tela offline — comando não entregue',r.delivered?'ok':'err'));
-const delDev     = id => confirm('Remover esta tela do painel?') && api('/devices/'+id,{method:'DELETE'}).then(()=>{toast('Tela removida');loadDevices()});
+const approveDev = id => api('/devices/'+id,{method:'PUT',body:{approved:true}}).then(()=>{toast('Tela aprovada','ok');loadDevices()}).catch(e=>toast(e.message,'err'));
+const setGroup   = (id,g) => api('/devices/'+id,{method:'PUT',body:{group_id:g||null}}).then(()=>loadDevices(true)).catch(e=>toast(e.message,'err'));
+const assignPl   = (pl,dev) => pl && api('/playlists/'+pl+'/assign',{method:'POST',body:{device_id:dev}}).then(()=>{toast('Playlist atribuída — a tela vai atualizar em instantes','ok');loadDevices(true)}).catch(e=>toast(e.message,'err'));
+const cmd        = (id,c) => api('/devices/'+id+'/command',{method:'POST',body:{command:c}}).then(r=>toast(r.delivered?'Comando enviado':'Tela offline — comando não entregue',r.delivered?'ok':'err')).catch(e=>toast(e.message,'err'));
+const delDev     = id => confirm('Remover esta tela do painel?') && api('/devices/'+id,{method:'DELETE'}).then(()=>{toast('Tela removida');loadDevices()}).catch(e=>toast(e.message,'err'));
 
 /* ================= PLAYLISTS ================= */
 async function loadPlaylists(){
@@ -358,10 +405,10 @@ async function loadPlaylists(){
     : `<div class="card"><div class="empty"><div class="eyebrow">Nenhuma playlist</div>Crie a primeira playlist acima e monte a sequência de exibição.</div></div>`);
 }
 const createPl=()=>{const n=$('#plname').value.trim();if(!n)return toast('Dê um nome à playlist','err');
-  api('/playlists',{method:'POST',body:{name:n}}).then(()=>{toast('Playlist criada','ok');loadPlaylists()})};
-const delPl=id=>confirm('Excluir esta playlist? As telas que a exibem ficarão sem conteúdo.')&&api('/playlists/'+id,{method:'DELETE'}).then(()=>{toast('Playlist excluída');loadPlaylists()});
+  api('/playlists',{method:'POST',body:{name:n}}).then(()=>{toast('Playlist criada','ok');loadPlaylists()}).catch(e=>toast(e.message,'err'))};
+const delPl=id=>confirm('Excluir esta playlist? As telas que a exibem ficarão sem conteúdo.')&&api('/playlists/'+id,{method:'DELETE'}).then(()=>{toast('Playlist excluída');loadPlaylists()}).catch(e=>toast(e.message,'err'));
 function itemsOf(id){return window._pls.find(p=>p.id===id).items.map(it=>({media_id:it.media_id,duration_override:it.duration_override,transition_type:it.transition_type}))}
-function saveItems(id,items){return api('/playlists/'+id+'/items',{method:'PUT',body:{items}}).then(loadPlaylists)}
+function saveItems(id,items){return api('/playlists/'+id+'/items',{method:'PUT',body:{items}}).then(loadPlaylists).catch(e=>toast(e.message,'err'))}
 function addItem(id){const m=$('#add-'+id).value;if(!m)return;const items=itemsOf(id);
   items.push({media_id:m,duration_override:parseInt($('#dur-'+id).value)||null,transition_type:'fade'});
   saveItems(id,items).then(()=>toast('Mídia adicionada — telas notificadas','ok'))}
@@ -396,7 +443,7 @@ async function loadMedia(){
   file.onchange=()=>uploadFiles(file.files);
 }
 async function uploadFiles(files){
-  for (const f of files) {
+  for (const f of files){
     toast(`Enviando ${f.name}…`);
     const fd=new FormData();fd.append('file',f);
     try{await api('/media/upload',{method:'POST',body:fd});toast(`${f.name} enviado`,'ok')}
@@ -404,7 +451,7 @@ async function uploadFiles(files){
   }
   loadMedia();
 }
-const delMedia=id=>confirm('Excluir esta mídia? Ela sairá das playlists que a usam.')&&api('/media/'+id,{method:'DELETE'}).then(()=>{toast('Mídia excluída');loadMedia()});
+const delMedia=id=>confirm('Excluir esta mídia? Ela sairá das playlists que a usam.')&&api('/media/'+id,{method:'DELETE'}).then(()=>{toast('Mídia excluída');loadMedia()}).catch(e=>toast(e.message,'err'));
 
 /* ================= GRUPOS ================= */
 async function loadGroups(){
@@ -425,12 +472,78 @@ async function loadGroups(){
       </select>
       <button class="icobtn del" onclick="delGr('${g.id}')" title="Excluir grupo">✕</button>
     </div>`}).join('')+`</div></div>`
-    : `<div class="card"><div class="empty"><div class="eyebrow">Nenhum grupo</div>Grupos permitem enviar uma playlist para várias telas de uma vez.</div></div>`);
+    : `<div class="card"><div class="empty"><div class="eyebrow">Nenhum grupo</div>Grupos permitem enviar uma playlist para várias telas de uma vez<br>e delimitar onde cada editor pode publicar.</div></div>`);
 }
 const createGr=()=>{const n=$('#gname').value.trim();if(!n)return toast('Dê um nome ao grupo','err');
-  api('/groups',{method:'POST',body:{name:n}}).then(()=>{toast('Grupo criado','ok');loadGroups()})};
-const delGr=id=>confirm('Excluir grupo? As telas continuam, apenas saem do grupo.')&&api('/groups/'+id,{method:'DELETE'}).then(loadGroups);
-const assignGr=(pl,g)=>pl&&api('/playlists/'+pl+'/assign',{method:'POST',body:{group_id:g}}).then(()=>toast('Playlist enviada a todas as telas do grupo','ok'));
+  api('/groups',{method:'POST',body:{name:n}}).then(()=>{toast('Grupo criado','ok');loadGroups()}).catch(e=>toast(e.message,'err'))};
+const delGr=id=>confirm('Excluir grupo? As telas continuam, apenas saem do grupo.')&&api('/groups/'+id,{method:'DELETE'}).then(loadGroups).catch(e=>toast(e.message,'err'));
+const assignGr=(pl,g)=>pl&&api('/playlists/'+pl+'/assign',{method:'POST',body:{group_id:g}}).then(()=>toast('Playlist enviada a todas as telas do grupo','ok')).catch(e=>toast(e.message,'err'));
+
+/* ================= USUÁRIOS ================= */
+async function loadUsers(){
+  const [users,grps]=await Promise.all([api('/users'),api('/groups')]);
+  window._grps=grps;
+  const groupChecks = (prefix,selected=[]) => grps.length
+    ? `<div class="checks">${grps.map(g=>
+        `<label><input type="checkbox" class="${prefix}" value="${g.id}" ${selected.includes(g.id)?'checked':''}>${esc(g.name)}</label>`).join('')}</div>`
+    : `<div class="sub" style="padding:8px 2px">Nenhum grupo criado ainda — crie grupos para delimitar onde editores podem publicar.</div>`;
+
+  $('#tab-users').innerHTML =
+    `<div class="pagehead"><h2>Usuários</h2><span class="eyebrow">${users.length} contas</span></div>
+    <div class="card"><h3>Novo usuário</h3>
+      <div class="row">
+        <input id="nuemail" class="grow" type="email" placeholder="E-mail">
+        <input id="nupass" class="grow" type="password" placeholder="Senha">
+        <select id="nurole" onchange="$('#nugroups').classList.toggle('hidden',this.value!=='manager')">
+          <option value="manager">Editor</option>
+          <option value="viewer">Visualizador</option>
+          <option value="admin">Administrador</option>
+        </select>
+        <button class="btn" onclick="createUser()">Criar usuário</button>
+      </div>
+      <div id="nugroups">
+        <div class="eyebrow" style="margin:12px 2px 2px">Pode publicar nos grupos</div>
+        ${groupChecks('nu-g')}
+      </div>
+      <div class="sub" style="margin-top:6px">Administrador: acesso total · Editor: publica apenas nos grupos marcados · Visualizador: somente leitura</div>
+    </div>
+    <div class="card"><div class="list">`+
+    users.map(u=>`<div class="item">
+      <div class="grow"><b>${esc(u.email)}</b>
+        <div style="margin-top:5px"><span class="pill role-${u.role}">${ROLE_LABEL[u.role]||u.role}</span>
+        ${u.role==='manager' ? (u.groups.length ? u.groups.map(g=>`<span class="chip">${esc(g.name)}</span>`).join('') : '<span class="sub">sem grupos — não pode publicar</span>') : ''}</div>
+      </div>
+      <select onchange="updUser('${u.id}',{role:this.value})" aria-label="Papel">
+        ${['manager','viewer','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+      </select>
+      ${u.role==='manager'?`<button class="btn ghost sm" onclick="$('#ug-${u.id}').classList.toggle('hidden')">Grupos</button>`:''}
+      <button class="icobtn" onclick="resetPass('${u.id}','${esc(u.email)}')" title="Trocar senha">🔑</button>
+      <button class="icobtn del" onclick="delUser('${u.id}','${esc(u.email)}')" title="Excluir">✕</button>
+      ${u.role==='manager'?`<div id="ug-${u.id}" class="hidden" style="flex-basis:100%">
+        ${groupChecks('ug-'+u.id, u.groups.map(g=>g.id))}
+        <button class="btn sm" onclick="saveUserGroups('${u.id}')">Salvar grupos</button>
+      </div>`:''}
+    </div>`).join('')+`</div></div>`;
+}
+function createUser(){
+  const email=$('#nuemail').value.trim(), pass=$('#nupass').value, role=$('#nurole').value;
+  if(!email||!pass) return toast('Informe e-mail e senha','err');
+  const group_ids=[...document.querySelectorAll('.nu-g:checked')].map(c=>c.value);
+  api('/users',{method:'POST',body:{email,password:pass,role,group_ids}})
+    .then(()=>{toast('Usuário criado','ok');loadUsers()}).catch(e=>toast(e.message,'err'));
+}
+const updUser=(id,body)=>api('/users/'+id,{method:'PUT',body})
+  .then(()=>{toast('Usuário atualizado','ok');loadUsers()}).catch(e=>{toast(e.message,'err');loadUsers()});
+function saveUserGroups(id){
+  const group_ids=[...document.querySelectorAll('.ug-'+id+':checked')].map(c=>c.value);
+  updUser(id,{group_ids});
+}
+function resetPass(id,email){
+  const p=prompt('Nova senha para '+email+':');
+  if(p) updUser(id,{password:p});
+}
+const delUser=(id,email)=>confirm('Excluir o usuário '+email+'?')&&api('/users/'+id,{method:'DELETE'})
+  .then(()=>{toast('Usuário excluído');loadUsers()}).catch(e=>toast(e.message,'err'));
 
 if(token)boot();
 </script>
