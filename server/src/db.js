@@ -87,4 +87,16 @@ CREATE INDEX IF NOT EXISTS idx_items_playlist ON playlist_items(playlist_id, pos
 CREATE INDEX IF NOT EXISTS idx_logs_device ON execution_logs(device_id, timestamp);
 `);
 
+// Migração: colunas de layout/overlays por dispositivo (painel de clima e rodapé)
+function ensureColumn(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+ensureColumn('devices', 'weather_enabled', 'INTEGER DEFAULT 0');
+ensureColumn('devices', 'weather_location', 'TEXT');
+ensureColumn('devices', 'weather_lat', 'REAL');
+ensureColumn('devices', 'weather_lon', 'REAL');
+ensureColumn('devices', 'ticker_enabled', 'INTEGER DEFAULT 0');
+ensureColumn('devices', 'ticker_text', 'TEXT');
+
 module.exports = db;

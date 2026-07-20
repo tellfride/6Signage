@@ -282,8 +282,82 @@ app.post('/api/devices/register', (req, res) => {
   res.json({ device_id: d.id, approved: !!d.approved });
 });
 
-function buildManifest(device) {
-  if (!device.approved || !device.playlist_id) return { playlist: null, items: [], sync_interval: 60 };
+// ---------- Clima (Open-Meteo, gratuito e sem chave de API) ----------
+const weatherCache = new Map(); // "lat,lon" -> { ts, data }
+async function getWeather(lat, lon) {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const cached = weatherCache.get(key);
+  if (cached && Date.now() - cached.ts < 15 * 60 * 1000) return cached.data;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const j = await r.json();
+    const c = j.current || {};
+    const data = {
+      temp: Math.round(c.temperature_2m),
+      code: c.weather_code,
+      humidity: c.relative_humidity_2m,
+      wind: Math.round(c.wind_speed_10m)
+    };
+    weatherCache.set(key, { ts: Date.now(), data });
+    return data;
+  } catch {
+    return cached ? cached.data : null; // em falha de rede, devolve o último conhecido
+  }
+}
+
+// Busca de localidade para o editor (autocompletar cidade)
+app.get('/api/weather/search', auth, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json([]);
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}` +
+      `&count=6&language=pt&format=json`, { signal: AbortSignal.timeout(8000) });
+    const j = await r.json();
+    res.json((j.results || []).map(x => ({
+      name: x.name, region: x.admin1 || '', country: x.country_code || '',
+      lat: x.latitude, lon: x.longitude
+    })));
+  } catch {
+    res.status(502).json({ error: 'Não foi possível buscar a localidade agora' });
+  }
+});
+
+// Salvar layout/overlays de uma tela (painel de clima + rodapé de avisos)
+app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
+  const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'Tela não encontrada' });
+  const allowed = allowedGroups(req.user);
+  if (allowed && (!d.group_id || !allowed.includes(d.group_id)))
+    return res.status(403).json({ error: 'Você não tem permissão para editar esta tela' });
+  const b = req.body || {};
+  db.prepare(`UPDATE devices SET
+      weather_enabled = ?, weather_location = ?, weather_lat = ?, weather_lon = ?,
+      ticker_enabled = ?, ticker_text = ? WHERE id = ?`)
+    .run(b.weather_enabled ? 1 : 0, b.weather_location || null,
+         b.weather_lat ?? null, b.weather_lon ?? null,
+         b.ticker_enabled ? 1 : 0, b.ticker_text || null, d.id);
+  notifyDevice(d.id);
+  res.json({ ok: true });
+});
+
+async function buildLayout(d) {
+  const layout = {
+    weather: { enabled: !!d.weather_enabled, city: d.weather_location || '' },
+    ticker: { enabled: !!d.ticker_enabled, text: d.ticker_text || '' }
+  };
+  if (d.weather_enabled && d.weather_lat != null && d.weather_lon != null) {
+    const w = await getWeather(d.weather_lat, d.weather_lon);
+    if (w) Object.assign(layout.weather, w);
+  }
+  return layout;
+}
+
+async function buildManifest(device) {
+  const layout = await buildLayout(device);
+  if (!device.approved || !device.playlist_id)
+    return { playlist: null, items: [], sync_interval: 60, layout };
   const playlist = db.prepare('SELECT id, name, updated_at FROM playlists WHERE id = ?').get(device.playlist_id);
   const items = db.prepare(`
     SELECT m.id AS media_id, m.file_path AS url, m.file_type, m.checksum,
@@ -291,13 +365,13 @@ function buildManifest(device) {
            pi.transition_type
     FROM playlist_items pi JOIN media m ON m.id = pi.media_id
     WHERE pi.playlist_id = ? ORDER BY pi.position`).all(device.playlist_id);
-  return { playlist, items, sync_interval: 60 };
+  return { playlist, items, sync_interval: 60, layout };
 }
 
-app.get('/api/player/manifest', (req, res) => {
+app.get('/api/player/manifest', async (req, res) => {
   const d = db.prepare('SELECT * FROM devices WHERE device_key = ?').get(req.query.device_key);
   if (!d) return res.status(404).json({ error: 'Dispositivo não registrado' });
-  res.json(buildManifest(d));
+  res.json(await buildManifest(d));
 });
 
 app.post('/api/player/heartbeat', (req, res) => {

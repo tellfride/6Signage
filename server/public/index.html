@@ -171,6 +171,67 @@ input.grow{flex:1;min-width:150px}
 }
 @media(min-width:901px){#tabbar{display:none}}
 .hidden{display:none!important}
+
+/* ---------- editor de layout (modal) ---------- */
+#modal{position:fixed;inset:0;background:rgba(5,8,14,.7);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:18px}
+#modal.on{display:flex}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:min(860px,100%);max-height:92vh;overflow:auto}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.sheet-head h3{font-size:17px;font-weight:700}
+.sheet-body{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:22px}
+@media(max-width:720px){.sheet-body{grid-template-columns:1fr}}
+.sheet-foot{display:flex;gap:10px;justify-content:flex-end;padding:16px 22px;border-top:1px solid var(--line);position:sticky;bottom:0;background:var(--panel)}
+
+/* preview 16:9 espelhando o player */
+.prev{aspect-ratio:16/9;border-radius:12px;overflow:hidden;position:relative;background:#05070C;border:1px solid var(--line);display:grid}
+.prev-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:#3A4356;font-family:var(--mono);font-size:12px;letter-spacing:2px;
+  background:repeating-linear-gradient(135deg,#0A0F1A 0 12px,#0C1220 12px 24px);transition:left .3s,bottom .3s}
+.prev.has-wx .prev-stage{left:26%}
+.prev.has-ticker .prev-stage{bottom:16%}
+.prev-wx{position:absolute;left:0;top:0;bottom:0;width:26%;display:none;flex-direction:column;gap:4%;
+  padding:7% 5%;box-sizing:border-box;color:#fff;background:linear-gradient(165deg,#0B2A6B,#123A8C)}
+.prev.has-wx .prev-wx{display:flex}
+.prev.has-wx.has-ticker .prev-wx{bottom:16%}
+.prev-time{font-size:1.5vw;font-weight:800;line-height:1}
+.prev-temp{font-size:1.7vw;font-weight:800;margin-top:auto}
+.prev-cond{font-size:.8vw;color:#AEC4FF}
+.prev-city{font-size:.72vw;color:#AEC4FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prev-ticker{position:absolute;left:0;right:0;bottom:0;height:16%;display:none;align-items:center;
+  background:linear-gradient(90deg,#081F52,#0E2E73);border-top:2px solid var(--acc);overflow:hidden}
+.prev.has-ticker .prev-ticker{display:flex}
+.prev-ticker .pb{background:var(--acc);color:#fff;height:100%;display:flex;align-items:center;padding:0 2%;font-weight:800;font-size:1vw}
+.prev-ticker b{padding:0 2%;font-size:.8vw;background:rgba(255,255,255,.1);height:100%;display:flex;align-items:center;color:#fff}
+.prev-ticker .pt{padding:0 2%;font-size:.85vw;color:#EAF1FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+@media(max-width:720px){.prev-time{font-size:4vw}.prev-temp{font-size:4.5vw}.prev-cond{font-size:2vw}.prev-city{font-size:1.8vw}.prev-ticker .pb{font-size:2.6vw}.prev-ticker b,.prev-ticker .pt{font-size:2.2vw}}
+
+/* controles */
+.ctrl{border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:14px;background:var(--panel2)}
+.ctrl .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ctrl .top .t{font-weight:650;font-size:14px;display:flex;align-items:center;gap:8px}
+.ctrl .desc{font-size:12px;color:var(--mut);margin-top:4px}
+.ctrl .fields{margin-top:13px;display:none}
+.ctrl.on .fields{display:block}
+.ctrl textarea{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:13.5px;font-family:inherit;resize:vertical;min-height:74px}
+.ctrl textarea:focus{border-color:var(--acc);outline:none}
+/* switch */
+.sw{position:relative;width:44px;height:25px;flex-shrink:0}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:99px;cursor:pointer;transition:.2s}
+.sw span::before{content:'';position:absolute;height:19px;width:19px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.sw input:checked+span{background:linear-gradient(135deg,var(--acc),var(--acc2))}
+.sw input:checked+span::before{transform:translateX(19px)}
+.sw input:focus-visible+span{outline:2px solid var(--acc);outline-offset:2px}
+/* autocomplete de localidade */
+.geo{position:relative;margin-bottom:8px}
+.geo input{width:100%}
+.geo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:5;overflow:hidden;display:none}
+.geo-list.on{display:block}
+.geo-list button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:10px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line)}
+.geo-list button:last-child{border-bottom:0}
+.geo-list button:hover,.geo-list button.hi{background:var(--nav-bg)}
+.geo-list .muted{color:var(--mut);font-size:11px}
+.picked{font-size:13px;color:var(--ok);display:flex;align-items:center;gap:6px;padding:2px}
 </style>
 </head>
 <body>
@@ -212,6 +273,65 @@ input.grow{flex:1;min-width:150px}
   </div>
 </div>
 <div id="tabbar"></div>
+
+<div id="modal" onclick="if(event.target===this)closeLayout()">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h3>🎨 Personalizar tela — <span id="lmName"></span></h3>
+      <button class="icobtn" onclick="closeLayout()" title="Fechar">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div>
+        <div class="eyebrow" style="margin-bottom:8px">Pré-visualização</div>
+        <div class="prev" id="lmPrev">
+          <div class="prev-wx">
+            <div class="prev-time">14:25</div>
+            <div class="prev-temp">☀️ 23°</div>
+            <div class="prev-cond">Céu limpo</div>
+            <div class="prev-city">📍 <span id="lmPvCity">—</span></div>
+          </div>
+          <div class="prev-stage">SEU CONTEÚDO</div>
+          <div class="prev-ticker"><span class="pb" id="lmPvDay">23</span><b>AVISOS</b><span class="pt" id="lmPvText">—</span></div>
+        </div>
+        <div class="sub" style="margin-top:8px">Assim a tela ficará. O conteúdo da playlist ocupa a área central.</div>
+      </div>
+      <div>
+        <div class="ctrl" id="lmWxCtrl">
+          <div class="top">
+            <div><div class="t">🌦️ Painel de clima</div>
+              <div class="desc">Mostra hora, data e temperatura na lateral.</div></div>
+            <label class="sw"><input type="checkbox" id="lmWxOn" onchange="lmToggle()"><span></span></label>
+          </div>
+          <div class="fields">
+            <div class="eyebrow" style="margin-bottom:6px">Localidade</div>
+            <div class="geo">
+              <input id="lmGeo" placeholder="Digite a cidade (ex.: Porto Alegre)" autocomplete="off"
+                     oninput="geoSearch(this.value)" onkeydown="geoKey(event)">
+              <div class="geo-list" id="lmGeoList"></div>
+            </div>
+            <div class="picked" id="lmPicked"></div>
+          </div>
+        </div>
+        <div class="ctrl" id="lmTkCtrl">
+          <div class="top">
+            <div><div class="t">📰 Rodapé de avisos</div>
+              <div class="desc">Faixa com mensagens que rolam no pé da tela.</div></div>
+            <label class="sw"><input type="checkbox" id="lmTkOn" onchange="lmToggle()"><span></span></label>
+          </div>
+          <div class="fields">
+            <div class="eyebrow" style="margin-bottom:6px">Mensagens (uma por linha)</div>
+            <textarea id="lmTkText" placeholder="Bem-vindos à nossa empresa!&#10;Reunião geral sexta-feira às 15h" oninput="lmPreview()"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn ghost" onclick="closeLayout()">Cancelar</button>
+      <button class="btn" onclick="saveLayout()">Salvar e aplicar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <script>
@@ -306,6 +426,7 @@ async function loadDevices(silent){
   let devs, pls, grps;
   try { [devs,pls,grps]=await Promise.all([api('/devices'),api('/playlists'),api('/groups')]); }
   catch(e){ if(!silent) toast(e.message,'err'); return }
+  window._devs = devs;
   const online = devs.filter(d=>d.status==='online').length;
   const pending = devs.filter(d=>!d.approved).length;
 
@@ -343,7 +464,8 @@ async function loadDevices(silent){
           </select>
         </div>
         <div class="tvactions">
-          <button class="btn ghost sm" onclick="cmd('${d.id}','next')" title="Próximo item">⏭ Avançar</button>
+          <button class="btn ghost sm" onclick="openLayout('${d.id}')" title="Clima e rodapé">🎨 Personalizar</button>
+          <button class="btn ghost sm" onclick="cmd('${d.id}','next')" title="Próximo item">⏭</button>
           <button class="btn ghost sm" onclick="cmd('${d.id}','restart_player')" title="Reiniciar player">↻</button>
           <span style="flex:1"></span>
           <button class="icobtn del" onclick="delDev('${d.id}')" title="Remover tela">✕</button>
@@ -544,6 +666,103 @@ function resetPass(id,email){
 }
 const delUser=(id,email)=>confirm('Excluir o usuário '+email+'?')&&api('/users/'+id,{method:'DELETE'})
   .then(()=>{toast('Usuário excluído');loadUsers()}).catch(e=>toast(e.message,'err'));
+
+/* ================= EDITOR DE LAYOUT ================= */
+let lmDev = null, lmState = null, geoTimer = null, geoHi = -1;
+
+function openLayout(id){
+  lmDev = (window._devs||[]).find(d=>d.id===id);
+  if(!lmDev) return;
+  lmState = {
+    weather_enabled: !!lmDev.weather_enabled,
+    weather_location: lmDev.weather_location || '',
+    weather_lat: lmDev.weather_lat, weather_lon: lmDev.weather_lon,
+    ticker_enabled: !!lmDev.ticker_enabled,
+    ticker_text: lmDev.ticker_text || ''
+  };
+  $('#lmName').textContent = lmDev.name;
+  $('#lmWxOn').checked = lmState.weather_enabled;
+  $('#lmTkOn').checked = lmState.ticker_enabled;
+  $('#lmGeo').value = '';
+  $('#lmGeoList').classList.remove('on');
+  $('#lmTkText').value = lmState.ticker_text;
+  renderPicked();
+  lmToggle();
+  $('#modal').classList.add('on');
+}
+function closeLayout(){ $('#modal').classList.remove('on'); }
+
+function renderPicked(){
+  $('#lmPicked').innerHTML = lmState.weather_location
+    ? `✓ <span>${esc(lmState.weather_location)}</span>`
+    : '<span class="sub">Nenhuma localidade escolhida ainda.</span>';
+}
+function lmToggle(){
+  $('#lmWxCtrl').classList.toggle('on', $('#lmWxOn').checked);
+  $('#lmTkCtrl').classList.toggle('on', $('#lmTkOn').checked);
+  lmPreview();
+}
+function lmPreview(){
+  const prev = $('#lmPrev');
+  prev.classList.toggle('has-wx', $('#lmWxOn').checked);
+  const txt = $('#lmTkText').value.trim();
+  prev.classList.toggle('has-ticker', $('#lmTkOn').checked && !!txt);
+  $('#lmPvCity').textContent = lmState.weather_location || 'escolha a cidade';
+  $('#lmPvText').textContent = txt ? txt.split('\n').filter(Boolean).join('  •  ') : 'suas mensagens aqui';
+  const now = new Date();
+  $('#lmPvDay').textContent = String(now.getDate()).padStart(2,'0');
+}
+
+function geoSearch(q){
+  clearTimeout(geoTimer); geoHi = -1;
+  if(q.trim().length < 2){ $('#lmGeoList').classList.remove('on'); return; }
+  geoTimer = setTimeout(async ()=>{
+    try{
+      const list = await api('/weather/search?q='+encodeURIComponent(q.trim()));
+      const box = $('#lmGeoList');
+      if(!list.length){ box.classList.remove('on'); return; }
+      box.innerHTML = list.map((r,i)=>{
+        const label = [r.name, r.region, r.country].filter(Boolean).join(', ');
+        return `<button data-i="${i}" onmousedown="event.preventDefault()" onclick='pickGeo(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+          ${esc(r.name)} <span class="muted">${esc([r.region,r.country].filter(Boolean).join(', '))}</span></button>`;
+      }).join('');
+      box._items = list;
+      box.classList.add('on');
+    }catch(e){ toast(e.message,'err'); }
+  }, 300);
+}
+function geoKey(e){
+  const box = $('#lmGeoList'); if(!box.classList.contains('on')) return;
+  const btns = [...box.querySelectorAll('button')];
+  if(e.key==='ArrowDown'){ e.preventDefault(); geoHi=Math.min(geoHi+1,btns.length-1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); geoHi=Math.max(geoHi-1,0); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(geoHi>=0&&box._items) pickGeo(box._items[geoHi]); return; }
+  else if(e.key==='Escape'){ box.classList.remove('on'); return; }
+  btns.forEach((b,i)=>b.classList.toggle('hi',i===geoHi));
+}
+function pickGeo(r){
+  lmState.weather_location = [r.name, r.region].filter(Boolean).join(', ');
+  lmState.weather_lat = r.lat; lmState.weather_lon = r.lon;
+  $('#lmGeo').value = '';
+  $('#lmGeoList').classList.remove('on');
+  renderPicked(); lmPreview();
+}
+
+function saveLayout(){
+  const wxOn = $('#lmWxOn').checked;
+  if(wxOn && (lmState.weather_lat==null || lmState.weather_lon==null))
+    return toast('Escolha uma localidade para o painel de clima','err');
+  const body = {
+    weather_enabled: wxOn,
+    weather_location: lmState.weather_location,
+    weather_lat: lmState.weather_lat, weather_lon: lmState.weather_lon,
+    ticker_enabled: $('#lmTkOn').checked,
+    ticker_text: $('#lmTkText').value.trim()
+  };
+  api('/devices/'+lmDev.id+'/layout',{method:'PUT',body})
+    .then(()=>{ toast('Layout aplicado — a tela vai atualizar em instantes','ok'); closeLayout(); loadDevices(true); })
+    .catch(e=>toast(e.message,'err'));
+}
 
 if(token)boot();
 </script>

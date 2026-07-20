@@ -3,26 +3,83 @@
 <head>
 <meta charset="utf-8">
 <style>
-html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;cursor:none}
-.slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s}
+:root{--wx-bg1:#0B2A6B;--wx-bg2:#123A8C;--accent:#5B8CFF}
+html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;cursor:none;
+  font-family:system-ui,'Segoe UI',sans-serif;color:#fff}
+
+/* palco do conteúdo (encolhe quando há overlays) */
+#stage{position:absolute;inset:0;transition:left .35s,bottom .35s;overflow:hidden}
+body.has-wx #stage{left:22%}
+body.has-ticker #stage{bottom:12%}
+.slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s;background:#000}
 .slide.show{opacity:1}
 .slide.cut{transition:none}
-#status{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:14px;color:#8A93A8;font-family:ui-monospace,Consolas,monospace;font-size:18px;text-align:center;padding:40px}
-#status .tv{width:76px;height:56px;border:3px solid #5B8CFF;border-radius:8px;position:relative;opacity:.9}
-#status .tv::after{content:'';position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);
-  width:30px;height:4px;background:#5B8CFF;border-radius:3px}
-#status .tv i{position:absolute;right:6px;bottom:6px;width:9px;height:9px;border-radius:50%;
-  background:#3DDC97;box-shadow:0 0 10px #3DDC97;animation:pulse 1.6s infinite}
+
+/* painel de clima (barra lateral) */
+#wx{position:absolute;left:0;top:0;bottom:0;width:22%;display:none;flex-direction:column;
+  padding:4vh 1.6vw;gap:2.4vh;box-sizing:border-box;color:#fff;
+  background:linear-gradient(165deg,var(--wx-bg1),var(--wx-bg2));box-shadow:inset -6px 0 26px rgba(0,0,0,.35)}
+body.has-wx #wx{display:flex}
+body.has-wx.has-ticker #wx{bottom:12%}
+.wx-clock #wxTime{font-size:5.2vw;font-weight:800;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.wx-clock #wxDate{font-size:1.05vw;color:#AEC4FF;margin-top:.6vh;text-transform:capitalize}
+.wx-main{display:flex;align-items:center;gap:.6vw;margin-top:auto}
+.wx-icon{font-size:5vw;line-height:1}
+.wx-temp{font-size:6vw;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.wx-cond{font-size:1.5vw;font-weight:600;color:#E6EEFF}
+.wx-city{font-size:1.25vw;color:#AEC4FF;display:flex;align-items:center;gap:.4vw}
+.wx-city::before{content:'📍'}
+.wx-extra{display:flex;gap:1.4vw;font-size:1vw;color:#AEC4FF;border-top:1px solid rgba(255,255,255,.15);padding-top:1.6vh}
+
+/* rodapé de avisos (ticker) */
+#ticker{position:absolute;left:0;right:0;bottom:0;height:12%;display:none;align-items:stretch;
+  background:linear-gradient(90deg,#081F52,#0E2E73);border-top:2px solid var(--accent)}
+body.has-ticker #ticker{display:flex}
+.tick-badge{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;padding:0 1.6vw;min-width:7vw}
+.tick-badge #tickDay{font-size:2.6vw;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.tick-badge #tickMon{font-size:1vw;font-weight:700;letter-spacing:2px}
+.tick-label{display:flex;align-items:center;padding:0 1.4vw;font-weight:800;font-size:1.4vw;
+  letter-spacing:1px;color:#fff;background:rgba(255,255,255,.08)}
+.tick-view{flex:1;overflow:hidden;display:flex;align-items:center}
+.tick-track{display:inline-block;white-space:nowrap;font-size:1.9vw;font-weight:600;color:#EAF1FF;
+  padding-left:100%;will-change:transform;animation:scroll linear infinite}
+@keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion: reduce){.tick-track{animation-duration:1s !important}}
+
+/* status/espera (dentro do palco) */
+#statusWrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:#8A93A8;font-family:ui-monospace,Consolas,monospace;font-size:18px;text-align:center;padding:40px;background:#000}
+#statusWrap .tv{width:76px;height:56px;border:3px solid var(--accent);border-radius:8px;position:relative;opacity:.9}
+#statusWrap .tv::after{content:'';position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);width:30px;height:4px;background:var(--accent);border-radius:3px}
+#statusWrap .tv i{position:absolute;right:6px;bottom:6px;width:9px;height:9px;border-radius:50%;background:#3DDC97;box-shadow:0 0 10px #3DDC97;animation:pulse 1.6s infinite}
 @keyframes pulse{50%{opacity:.35}}
-#status small{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#4A5468}
+#statusWrap small{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#4A5468}
 </style>
 </head>
 <body>
-<div id="statusWrap">
-  <div id="status"><div class="tv"><i></i></div><span id="statusText">Conectando ao servidor…</span>
-  <small>6Signage Player · botao VOLTAR abre a configuracao</small></div>
+<div id="stage">
+  <div id="statusWrap">
+    <div class="tv"><i></i></div>
+    <span id="statusText">Conectando ao servidor…</span>
+    <small>6Signage Player · botão VOLTAR abre a configuração</small>
+  </div>
 </div>
+
+<aside id="wx">
+  <div class="wx-clock"><div id="wxTime">--:--</div><div id="wxDate">—</div></div>
+  <div class="wx-main"><span id="wxIcon" class="wx-icon">🌡️</span><span id="wxTemp" class="wx-temp">--°</span></div>
+  <div id="wxCond" class="wx-cond">—</div>
+  <div id="wxCity" class="wx-city">—</div>
+  <div class="wx-extra"><span id="wxHum">💧 --%</span><span id="wxWind">🌬 -- km/h</span></div>
+</aside>
+
+<footer id="ticker">
+  <div class="tick-badge"><span id="tickDay">--</span><span id="tickMon">—</span></div>
+  <div class="tick-label">AVISOS</div>
+  <div class="tick-view"><div id="tickTrack" class="tick-track"></div></div>
+</footer>
+
 <script>
 // Ponte nativa Android (substitui o preload do Electron)
 window.signage = {
@@ -40,9 +97,9 @@ window.__cacheDone = (id, result, ok) => {
   if (p) ok ? p.res(result) : p.rej(new Error(result));
 };
 
-let cfg, manifest = { items: [] }, idx = 0, timer = null, current = null, paused = false;
-const status = document.getElementById('statusWrap');
-const statusText = document.getElementById('statusText');
+let cfg, manifest = { items: [] }, idx = 0, timer = null, current = null, paused = false, clockTimer = null;
+const $ = id => document.getElementById(id);
+const stage = $('stage'), status = $('statusWrap'), statusText = $('statusText');
 
 async function register() {
   const r = await fetch(cfg.server + '/api/devices/register', {
@@ -50,7 +107,7 @@ async function register() {
     body: JSON.stringify({
       device_key: cfg.deviceKey, device_name: cfg.deviceName,
       resolution: `${screen.width}x${screen.height}`,
-      os_version: cfg.osVersion || navigator.platform, client_version: '0.1.0'
+      os_version: cfg.osVersion || navigator.platform, client_version: '0.2.0'
     })
   });
   return r.json();
@@ -60,6 +117,7 @@ async function syncManifest() {
   try {
     const r = await fetch(`${cfg.server}/api/player/manifest?device_key=${cfg.deviceKey}`);
     const m = await r.json();
+    renderLayout(m.layout);                          // overlays sempre atualizam
     const changed = JSON.stringify(m.items) !== JSON.stringify(manifest.items);
     manifest = m;
     if (!m.items.length) {
@@ -68,10 +126,9 @@ async function syncManifest() {
       stopPlayback();
     } else if (changed) {
       status.style.display = 'none';
-      // pré-baixa tudo antes de (re)começar
       for (const it of m.items) {
         try { it.localUrl = await window.signage.cacheMedia({ url: it.url, checksum: it.checksum }); }
-        catch (e) { console.error(e); it.localUrl = cfg.server + it.url; } // fallback: direto do servidor
+        catch (e) { console.error(e); it.localUrl = cfg.server + it.url; }
       }
       idx = 0; play();
     }
@@ -81,11 +138,53 @@ async function syncManifest() {
   }
 }
 
-function stopPlayback() {
-  clearTimeout(timer);
-  if (current) { current.remove(); current = null; }
+/* ---------- overlays: clima + rodapé ---------- */
+function wmo(code) {
+  const m = {0:['☀️','Céu limpo'],1:['🌤️','Predom. limpo'],2:['⛅','Parc. nublado'],3:['☁️','Nublado'],
+    45:['🌫️','Nevoeiro'],48:['🌫️','Nevoeiro'],51:['🌦️','Garoa'],53:['🌦️','Garoa'],55:['🌦️','Garoa forte'],
+    56:['🌧️','Garoa gelada'],57:['🌧️','Garoa gelada'],61:['🌧️','Chuva fraca'],63:['🌧️','Chuva'],65:['🌧️','Chuva forte'],
+    66:['🌧️','Chuva gelada'],67:['🌧️','Chuva gelada'],71:['🌨️','Neve fraca'],73:['🌨️','Neve'],75:['🌨️','Neve forte'],
+    77:['🌨️','Granizo'],80:['🌦️','Pancadas'],81:['🌧️','Pancadas'],82:['⛈️','Temporal'],
+    85:['🌨️','Neve'],86:['🌨️','Neve forte'],95:['⛈️','Tempestade'],96:['⛈️','Tempestade'],99:['⛈️','Tempestade']};
+  return m[code] || ['🌡️','—'];
+}
+function tickClock() {
+  const now = new Date();
+  const dias = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  $('wxTime').textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  $('wxDate').textContent = dias[now.getDay()] + ' · ' + now.getDate() + ' ' + meses[now.getMonth()];
+  $('tickDay').textContent = String(now.getDate()).padStart(2,'0');
+  $('tickMon').textContent = meses[now.getMonth()].toUpperCase();
+}
+function renderLayout(L) {
+  L = L || {};
+  const wx = L.weather || {}, tk = L.ticker || {};
+  document.body.classList.toggle('has-wx', !!wx.enabled);
+  if (wx.enabled) {
+    const [icon, text] = wmo(wx.code);
+    $('wxIcon').textContent = icon;
+    $('wxTemp').textContent = (wx.temp != null ? wx.temp : '--') + '°';
+    $('wxCond').textContent = wx.temp != null ? text : 'sem dados';
+    $('wxCity').textContent = wx.city || '';
+    $('wxHum').textContent = '💧 ' + (wx.humidity != null ? wx.humidity + '%' : '--');
+    $('wxWind').textContent = '🌬 ' + (wx.wind != null ? wx.wind + ' km/h' : '--');
+  }
+  const msg = (tk.text || '').trim();
+  const tickerOn = !!(tk.enabled && msg);
+  document.body.classList.toggle('has-ticker', tickerOn);
+  if (tickerOn) {
+    const parts = msg.split('\n').map(s => s.trim()).filter(Boolean).join('  •  ') + '  •  ';
+    $('tickTrack').textContent = parts + parts;
+    $('tickTrack').style.animationDuration = Math.max(14, parts.length * 0.28) + 's';
+  }
+  const needClock = wx.enabled || tickerOn;
+  if (needClock && !clockTimer) { tickClock(); clockTimer = setInterval(tickClock, 1000); }
+  if (!needClock && clockTimer) { clearInterval(clockTimer); clockTimer = null; }
 }
 
+/* ---------- reprodução ---------- */
+function stopPlayback() { clearTimeout(timer); if (current) { current.remove(); current = null; } }
 function play() {
   if (paused || !manifest.items.length) return;
   clearTimeout(timer);
@@ -103,13 +202,12 @@ function play() {
     timer = setTimeout(next, (it.duration || 10) * 1000);
   }
   el.className = 'slide' + (it.transition_type === 'cut' ? ' cut' : '');
-  document.body.appendChild(el);
+  stage.appendChild(el);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
   if (old) { old.classList.remove('show'); setTimeout(() => old.remove(), 700); }
   current = el;
   window._currentName = it.url.split('/').pop();
 }
-
 function next() { idx++; play(); }
 
 function heartbeat() {
@@ -120,8 +218,7 @@ function heartbeat() {
 }
 
 function connectWS() {
-  const wsUrl = cfg.server.replace(/^http/, 'ws') + '/ws?device_key=' + cfg.deviceKey;
-  const ws = new WebSocket(wsUrl);
+  const ws = new WebSocket(cfg.server.replace(/^http/, 'ws') + '/ws?device_key=' + cfg.deviceKey);
   ws.onmessage = ev => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'manifest_updated') syncManifest();
@@ -140,7 +237,7 @@ function connectWS() {
   try { await register(); } catch { statusText.textContent = 'Servidor inacessível: ' + cfg.server; }
   connectWS();
   await syncManifest();
-  setInterval(syncManifest, 60000);  // polling de fallback
+  setInterval(syncManifest, 60000);
   setInterval(heartbeat, 30000);
   heartbeat();
 })();

@@ -18,16 +18,25 @@ com painel de controle web responsivo (desktop e celular).
 
 ## Funcionalidades
 
-**Painel web (responsivo, mobile-first)**
+**Painel web (responsivo, mobile-first, tema claro/escuro)**
 - Dashboard "video wall": cada TV é um card com status ao vivo (online/offline), o que
   está no ar agora, resolução e grupo — atualizado a cada 15 s
 - Aprovação manual de novas telas (segurança: nenhum player entra sozinho)
 - Editor de playlists: ordem, duração por item, transições (fade/corte), duração total do ciclo
+- **Editor de layout com pré-visualização ao vivo** (por tela): liga/desliga o painel de
+  clima e o rodapé de avisos, com o resultado mostrado em tempo real
 - Biblioteca de mídia com upload por arrastar-e-soltar (MP4, MKV, WebM, JPG, PNG, WebP, até 1 GB)
 - Grupos de telas: envie uma playlist para várias TVs de uma vez
+- **Usuários e permissões**: papéis admin/editor/visualizador; editores publicam apenas
+  nos grupos autorizados
 - Controle remoto: avançar, pausar, retomar, reiniciar player
 - Download dos agentes (Windows/Android) direto do painel
-- Login JWT com papéis (admin/manager/viewer)
+- Login JWT
+
+**Overlays na tela (por dispositivo, opcionais)**
+- **Painel de clima**: relógio, data e temperatura em tempo real na lateral, para a
+  localidade escolhida (dados da [Open-Meteo](https://open-meteo.com), gratuita, sem chave)
+- **Rodapé de avisos**: faixa com mensagens que rolam no pé da tela
 
 **Players (Windows e Android TV)**
 - Assistente de configuração na primeira execução: endereço do servidor + nome da tela,
@@ -157,7 +166,8 @@ Renomeie para `6SignagePlayer-win64.zip` / `6SignagePlayer.apk` dentro de
 
 ## Roadmap
 
-- [x] **Fase 1 (MVP)**: auth, mídia, playlists, grupos, players Windows/Android, tempo real
+- [x] **Fase 1 (MVP)**: auth, mídia, playlists, grupos, players Windows/Android, tempo real,
+  tema claro/escuro, usuários com permissão por grupo, painel de clima e rodapé de avisos
 - [ ] **Fase 2**: agendamentos (horário/dias da semana/prioridade), PostgreSQL, refresh tokens, screenshots ao vivo
 - [ ] **Fase 3**: relatórios proof-of-play, transcodificação automática (FFmpeg), multi-tela, alertas de tela offline
 
