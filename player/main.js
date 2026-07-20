@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
+const { spawn } = require('child_process');
 
 // Config: lê primeiro config.json ao lado do executável (implantação em massa),
 // senão o config salvo pelo assistente em userData (sempre gravável).
@@ -71,6 +72,8 @@ const CACHE_DIR = () => {
   return d;
 };
 
+ipcMain.handle('check-update', () => { checkUpdate(); });
+
 ipcMain.handle('cache-media', async (ev, { url, checksum }) => {
   const dest = path.join(CACHE_DIR(), checksum + path.extname(url));
   if (fs.existsSync(dest)) return 'file://' + dest;
@@ -82,6 +85,61 @@ ipcMain.handle('cache-media', async (ev, { url, checksum }) => {
   fs.writeFileSync(dest, buf);
   return 'file://' + dest;
 });
+
+// ---------- Auto-update ----------
+// Baixa apenas o app.asar (o código do player) do servidor, valida o SHA-256,
+// e troca o arquivo por um script auxiliar que roda após o app fechar, então reinicia.
+function isNewer(remote, local) {
+  const a = String(remote).split('.').map(Number), b = String(local).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true;
+    if ((a[i] || 0) < (b[i] || 0)) return false;
+  }
+  return false;
+}
+
+let updating = false;
+async function checkUpdate() {
+  if (updating || !app.isPackaged || !config || !config.server) return;
+  try {
+    const r = await fetch(config.server + '/api/player/version?platform=win', { signal: AbortSignal.timeout(8000) });
+    const info = await r.json();
+    if (!info.url || info.available === false) return;
+    if (!isNewer(info.version, app.getVersion())) return;
+    console.log(`Atualização disponível: ${app.getVersion()} -> ${info.version}`);
+    await applyUpdate(info);
+  } catch (e) {
+    console.error('Falha ao verificar atualização:', e.message);
+  }
+}
+
+async function applyUpdate(info) {
+  updating = true;
+  const res = await fetch(config.server + info.url);
+  if (!res.ok) throw new Error('download do app.asar falhou');
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (info.sha256 && crypto.createHash('sha256').update(buf).digest('hex') !== info.sha256)
+    throw new Error('checksum do app.asar não confere');
+
+  const updDir = path.join(app.getPath('userData'), 'update');
+  fs.mkdirSync(updDir, { recursive: true });
+  const newAsar = path.join(updDir, 'app.asar');
+  fs.writeFileSync(newAsar, buf);
+
+  const target = path.join(process.resourcesPath, 'app.asar');
+  const exe = process.execPath;
+  const bat = path.join(updDir, 'apply-update.bat');
+  fs.writeFileSync(bat,
+    '@echo off\r\n' +
+    ':wait\r\n' +
+    'tasklist /fi "imagename eq 6signage-player.exe" 2>nul | find /i "6signage-player.exe" >nul\r\n' +
+    'if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n' +
+    `copy /y "${newAsar}" "${target}" >nul\r\n` +
+    `start "" "${exe}"\r\n` +
+    'del "%~f0"\r\n');
+  spawn('cmd.exe', ['/c', bat], { detached: true, stdio: 'ignore' }).unref();
+  app.exit(0); // o script espera o fechamento, troca o asar e reinicia
+}
 
 // ---------- Janelas ----------
 function openSetup() {
@@ -114,6 +172,9 @@ app.whenReady().then(() => {
   globalShortcut.register('CommandOrControl+Shift+S', openSetup);
   globalShortcut.register('CommandOrControl+Shift+Q', () => app.exit(0));
   if (config) openPlayer(); else openSetup();
+  // Verifica atualização ao iniciar (após 20 s) e a cada 6 horas
+  setTimeout(checkUpdate, 20000);
+  setInterval(checkUpdate, 6 * 60 * 60 * 1000);
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());

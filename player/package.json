@@ -1,7 +1,8 @@
 {
   "name": "6signage-player",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "6Signage Player - cliente Windows para TVs",
+  "author": "6Signage",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

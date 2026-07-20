@@ -2,8 +2,16 @@ package local.sixsignage.player;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInstaller;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -14,8 +22,10 @@ import android.webkit.WebViewClient;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
@@ -56,6 +66,75 @@ public class MainActivity extends Activity {
         hideSystemUi();
 
         if (getServer().isEmpty()) openSetup(); else openPlayer();
+
+        // Verifica atualização ao iniciar (após 20 s) e a cada 6 horas
+        final Handler h = new Handler(Looper.getMainLooper());
+        h.postDelayed(new Runnable() {
+            @Override public void run() { checkUpdate(); h.postDelayed(this, 6 * 60 * 60 * 1000L); }
+        }, 20000);
+    }
+
+    // ---------- Auto-update (baixa o APK novo e usa o instalador do sistema) ----------
+    private void checkUpdate() {
+        final String server = getServer();
+        if (server.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(server + "/api/player/version?platform=android").openConnection();
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(8000);
+                if (c.getResponseCode() != 200) return;
+                StringBuilder sb = new StringBuilder();
+                try (InputStream in = c.getInputStream()) {
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while ((n = in.read(buf)) > 0) sb.append(new String(buf, 0, n));
+                }
+                JSONObject o = new JSONObject(sb.toString());
+                int latest = o.optInt("versionCode", 0);
+                int cur = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+                if (latest <= cur || !o.has("url")) return;
+
+                File apk = new File(getCacheDir(), "update.apk");
+                HttpURLConnection dc = (HttpURLConnection) new URL(server + o.getString("url")).openConnection();
+                dc.setConnectTimeout(10000);
+                try (InputStream in = dc.getInputStream(); FileOutputStream out = new FileOutputStream(apk)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                runOnUiThread(() -> installApk(apk));
+            } catch (Exception e) { /* silencioso: tenta de novo no próximo ciclo */ }
+        }).start();
+    }
+
+    private void installApk(File apk) {
+        try {
+            // Android 8+: exige a permissão "instalar apps desconhecidos" (uma vez)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            }
+            PackageInstaller pi = getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params =
+                    new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            int sid = pi.createSession(params);
+            try (PackageInstaller.Session session = pi.openSession(sid)) {
+                try (OutputStream out = session.openWrite("apk", 0, apk.length());
+                     InputStream in = new FileInputStream(apk)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    session.fsync(out);
+                }
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= 31) flags |= PendingIntent.FLAG_MUTABLE;
+                PendingIntent pending = PendingIntent.getActivity(this, sid,
+                        new Intent(this, MainActivity.class).setAction("UPDATE_RESULT"), flags);
+                session.commit(pending.getIntentSender());
+            }
+        } catch (Exception e) { /* silencioso */ }
     }
 
     private String getServer() { return prefs.getString("server", ""); }
@@ -120,6 +199,9 @@ public class MainActivity extends Activity {
     }
 
     private class Bridge {
+
+        @JavascriptInterface
+        public void checkUpdate() { MainActivity.this.checkUpdate(); }
 
         @JavascriptInterface
         public String getConfig() {

@@ -1,0 +1,4 @@
+{
+  "win": { "version": "0.3.0", "url": "/downloads/player-app.asar" },
+  "android": { "version": "0.3.0", "versionCode": 2, "url": "/downloads/6SignagePlayer.apk" }
+}

@@ -91,7 +91,7 @@ async function register() {
     body: JSON.stringify({
       device_key: cfg.deviceKey, device_name: cfg.deviceName,
       resolution: `${screen.width}x${screen.height}`,
-      os_version: cfg.osVersion || navigator.platform, client_version: '0.2.0'
+      os_version: cfg.osVersion || navigator.platform, client_version: '0.3.0'
     })
   });
   return r.json();
@@ -211,6 +211,7 @@ function connectWS() {
       if (msg.command === 'pause') { paused = true; clearTimeout(timer); if (current && current.pause) current.pause(); }
       if (msg.command === 'play') { paused = false; if (current && current.play) current.play(); else play(); }
       if (msg.command === 'restart_player') location.reload();
+      if (msg.command === 'check_update' && window.signage.checkUpdate) window.signage.checkUpdate();
     }
   };
   ws.onclose = () => setTimeout(connectWS, 5000);

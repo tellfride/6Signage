@@ -45,6 +45,9 @@ com painel de controle web responsivo (desktop e celular).
 - Cache local de toda a mídia com validação SHA-256 — **funciona sem rede**
   (continua exibindo a última playlist se a conexão cair)
 - Atualização instantânea via WebSocket + polling de segurança a cada 60 s
+- **Auto-update**: o player verifica a versão no servidor (ao iniciar e a cada 6 h) e
+  se atualiza sozinho, sem visitar a TV. No Windows a troca é silenciosa (baixa só o
+  código, ~25 KB); no Android o instalador do sistema pede uma confirmação no controle
 - Heartbeat a cada 30 s (status e mídia atual visíveis no painel)
 - Fullscreen/kiosk, tela sempre ligada, transições suaves
 
@@ -130,19 +133,37 @@ Mínimo: Android 5.0. Compatível com launcher Leanback (Android TV).
 ## Gerando os agentes (artefatos de build)
 
 Os instaladores não são versionados no repositório — gere-os e coloque em
-`server/downloads/` (ou anexe nas Releases):
+`server/downloads/`:
 
 ```bash
-# Agente Windows (em uma máquina Windows, ou Linux com Wine para o Setup.exe)
-cd player && npm install && npm run dist
+# Agente Windows — gera win-unpacked e empacota o ZIP
+cd player && npm install
+npx electron-builder --win --x64 --dir
+# publique os DOIS arquivos:
+cp dist/win-unpacked/resources/app.asar ../server/downloads/player-app.asar   # p/ auto-update
+# (empacote dist/win-unpacked + o .bat em 6SignagePlayer-win64.zip)
 
 # Agente Android (requer JDK 17 + Android SDK 34)
 cd android && gradle assembleRelease
-# APK em android/app/build/outputs/apk/release/app-release.apk
+cp app/build/outputs/apk/release/app-release.apk ../server/downloads/6SignagePlayer.apk
 ```
 
-Renomeie para `6SignagePlayer-win64.zip` / `6SignagePlayer.apk` dentro de
-`server/downloads/` para os botões de download do painel funcionarem.
+Os arquivos em `server/downloads/`: `6SignagePlayer-win64.zip` (instalação nova no
+Windows), `player-app.asar` (auto-update do Windows) e `6SignagePlayer.apk` (Android,
+instalação nova e auto-update).
+
+### Publicando uma atualização (auto-update)
+
+1. Aumente a versão: `player/package.json` (`version`) para o Windows;
+   `android/app/build.gradle` (`versionCode` **e** `versionName`) para o Android.
+2. Recompile os agentes (comandos acima) e copie os artefatos para `server/downloads/`.
+3. Edite `server/player-version.json` com os novos números de versão.
+4. Pronto: em até 6 h (ou ao reiniciar) cada TV se atualiza sozinha. Para forçar agora,
+   use o botão **⬆** no card da tela, no painel.
+
+> **Android:** mantenha sempre a mesma chave de assinatura (o build usa a *debug key*
+> de `~/.android/debug.keystore`). O Android recusa atualizações assinadas com chave
+> diferente. Para produção, gere uma chave de release própria e use-a de forma fixa.
 
 ## API (resumo)
 
@@ -154,6 +175,7 @@ Renomeie para `6SignagePlayer-win64.zip` / `6SignagePlayer.apk` dentro de
 | Mídia | `GET /api/media`, `POST /api/media/upload`, `DELETE /api/media/:id` |
 | Grupos | CRUD `/api/groups` |
 | Player | `POST /api/devices/register`, `GET /api/player/manifest`, `POST /api/player/heartbeat` |
+| Update | `GET /api/player/version?platform=win\|android` |
 | Infra | `GET /api/health`, WebSocket em `/ws?device_key=...` |
 
 ## Segurança
@@ -167,7 +189,7 @@ Renomeie para `6SignagePlayer-win64.zip` / `6SignagePlayer.apk` dentro de
 ## Roadmap
 
 - [x] **Fase 1 (MVP)**: auth, mídia, playlists, grupos, players Windows/Android, tempo real,
-  tema claro/escuro, usuários com permissão por grupo, painel de clima e rodapé de avisos
+  tema claro/escuro, usuários com permissão por grupo, painel de clima, rodapé de avisos, auto-update
 - [ ] **Fase 2**: agendamentos (horário/dias da semana/prioridade), PostgreSQL, refresh tokens, screenshots ao vivo
 - [ ] **Fase 3**: relatórios proof-of-play, transcodificação automática (FFmpeg), multi-tela, alertas de tela offline
 

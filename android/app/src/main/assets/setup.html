@@ -68,6 +68,7 @@ window.signage = {
   getConfig: () => Promise.resolve(JSON.parse(NativeBridge.getConfig())),
   testServer: (url) => Promise.resolve(JSON.parse(NativeBridge.testServer(url))),
   saveConfig: (cfg) => NativeBridge.saveConfig(cfg.server, cfg.device_name),
+  checkUpdate: () => NativeBridge.checkUpdate(),
   cacheMedia: ({url, checksum}) => new Promise((res, rej) => {
     const id = ++window.__seq; window.__pending[id] = {res, rej};
     NativeBridge.cacheMedia(id, url, checksum || '');

@@ -23,6 +23,37 @@ app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
 app.get('/api/health', (req, res) =>
   res.json({ app: '6signage', version: require('../package.json').version }));
 
+// ---------- Auto-update dos players ----------
+const hashCache = new Map(); // path -> { mtime, size, sha256 }
+function fileMeta(file) {
+  const st = fs.statSync(file);
+  const c = hashCache.get(file);
+  if (c && c.mtime === st.mtimeMs) return c;
+  const sha256 = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const meta = { mtime: st.mtimeMs, size: st.size, sha256 };
+  hashCache.set(file, meta);
+  return meta;
+}
+
+// O player consulta a versão mais recente para a sua plataforma (win | android)
+app.get('/api/player/version', (req, res) => {
+  let cfg;
+  try { cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'player-version.json'), 'utf8')); }
+  catch { return res.status(500).json({ error: 'Configuração de versão indisponível' }); }
+  const info = cfg[req.query.platform];
+  if (!info) return res.status(400).json({ error: 'Plataforma inválida (use win ou android)' });
+  const out = { ...info };
+  const file = path.join(__dirname, '..', 'downloads', path.basename(info.url));
+  if (fs.existsSync(file)) {
+    const m = fileMeta(file);
+    out.size = m.size;
+    out.sha256 = m.sha256;
+  } else {
+    out.available = false;
+  }
+  res.json(out);
+});
+
 // ---------- Autenticação ----------
 function auth(req, res, next) {
   const h = req.headers.authorization || '';
