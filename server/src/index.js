@@ -265,12 +265,33 @@ app.delete('/api/groups/:id', auth, adminOnly, (req, res) => {
 app.get('/api/devices', auth, (req, res) => {
   const cutoff = new Date(Date.now() - 90_000).toISOString().replace('T', ' ').slice(0, 19);
   db.prepare(`UPDATE devices SET status='offline' WHERE last_heartbeat IS NULL OR last_heartbeat < ?`).run(cutoff);
-  res.json(db.prepare(`
-    SELECT d.*, g.name AS group_name, p.name AS playlist_name
+  const devices = db.prepare(`
+    SELECT d.*, g.name AS group_name, p.name AS playlist_name,
+           s.city AS sidebar_city, s.lat AS sidebar_lat, s.lon AS sidebar_lon
     FROM devices d
     LEFT JOIN device_groups g ON g.id = d.group_id
     LEFT JOIN playlists p ON p.id = d.playlist_id
-    ORDER BY d.name`).all());
+    LEFT JOIN sidebars s ON s.id = d.sidebar_id
+    ORDER BY d.name`).all();
+
+  // Dados para o espelho da tela no painel: frame no ar, clima e rodapé
+  const byFile = new Map(db.prepare('SELECT file_path, file_type FROM media').all()
+    .map(m => [m.file_path.split('/').pop(), m]));
+  const tickerText = db.prepare(`SELECT t.text FROM device_tickers dt
+      JOIN tickers t ON t.id = dt.ticker_id WHERE dt.device_id = ? ORDER BY t.name`);
+  for (const d of devices) {
+    const cm = d.current_media && byFile.get(d.current_media);
+    if (cm) { d.current_media_path = cm.file_path; d.current_media_type = cm.file_type; }
+    const tk = tickerText.all(d.id).map(r => (r.text || '').trim()).filter(Boolean);
+    d.ticker_count = tk.length;
+    d.ticker_preview = tk.join('\n').split('\n').map(s => s.trim()).filter(Boolean).join(' · ');
+    if (d.sidebar_lat != null && d.sidebar_lon != null) {
+      // só o que já está em cache — nunca busca durante a listagem
+      const c = weatherCache.get(`${d.sidebar_lat.toFixed(3)},${d.sidebar_lon.toFixed(3)}`);
+      if (c) d.sidebar_temp = c.data.temp;
+    }
+  }
+  res.json(devices);
 });
 
 app.put('/api/devices/:id', auth, canWrite, (req, res) => {
