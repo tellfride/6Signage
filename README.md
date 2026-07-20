@@ -33,10 +33,21 @@ com painel de controle web responsivo (desktop e celular).
 - Download dos agentes (Windows/Android) direto do painel
 - Login JWT
 
-**Overlays na tela (por dispositivo, opcionais)**
-- **Painel de clima**: relógio, data e temperatura em tempo real na lateral, para a
-  localidade escolhida (dados da [Open-Meteo](https://open-meteo.com), gratuita, sem chave)
-- **Rodapé de avisos**: faixa com mensagens que rolam no pé da tela
+**Playlists em três tipos** (aba Playlists)
+- **Mídia**: sequência de vídeos e imagens
+- **Rodapé**: faixas de avisos reutilizáveis — aplique em uma tela, em várias ou em
+  todas; uma tela pode exibir **várias faixas** ao mesmo tempo (as mensagens se juntam
+  num fluxo único)
+- **Barra lateral**: perfis de clima reutilizáveis — um perfil serve várias telas
+
+**Overlays na tela (opcionais, por tela)**
+- **Barra lateral de clima**: relógio, data, temperatura atual e **previsão de amanhã**
+  (máx/mín). Localidade por **cidade ou CEP** (via [BrasilAPI](https://brasilapi.com.br),
+  mais preciso); dados meteorológicos da [Open-Meteo](https://open-meteo.com) — ambas
+  gratuitas e sem chave
+- **Rodapé de avisos**: mensagens rolando em fluxo contínuo, da borda direita até a esquerda
+- **Tamanhos ajustáveis**: largura da coluna lateral (10–45%) e altura do rodapé (6–30%),
+  com pré-visualização ao vivo — a tipografia escala junto
 
 **Players (Windows e Android TV)**
 - Assistente de configuração na primeira execução: endereço do servidor + nome da tela,
@@ -172,6 +183,10 @@ instalação nova e auto-update).
 | Auth | `POST /api/auth/login` |
 | Telas | `GET/PUT/DELETE /api/devices`, `POST /api/devices/:id/command` |
 | Playlists | CRUD + `PUT /api/playlists/:id/items` + `POST /api/playlists/:id/assign` |
+| Rodapé | CRUD `/api/tickers` + `PUT /api/tickers/:id/devices` |
+| Barra lateral | CRUD `/api/sidebars` + `PUT /api/sidebars/:id/devices` |
+| Layout | `PUT /api/devices/:id/layout` (perfil, faixas, larguras) |
+| Clima | `GET /api/weather/search?q=`, `GET /api/weather/cep?cep=` |
 | Mídia | `GET /api/media`, `POST /api/media/upload`, `DELETE /api/media/:id` |
 | Grupos | CRUD `/api/groups` |
 | Player | `POST /api/devices/register`, `GET /api/player/manifest`, `POST /api/player/heartbeat` |

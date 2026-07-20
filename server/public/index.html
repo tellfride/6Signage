@@ -173,8 +173,18 @@ input.grow{flex:1;min-width:150px}
 .hidden{display:none!important}
 
 /* ---------- editor de layout (modal) ---------- */
-#modal{position:fixed;inset:0;background:rgba(5,8,14,.7);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:18px}
-#modal.on{display:flex}
+#modal,#assignModal{position:fixed;inset:0;background:rgba(5,8,14,.7);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:18px}
+#modal.on,#assignModal.on{display:flex}
+/* sliders de tamanho */
+.slider{display:flex;align-items:center;gap:11px;margin-top:13px}
+.slider label{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--faint);white-space:nowrap}
+.slider input[type=range]{flex:1;accent-color:var(--acc);min-width:80px}
+.slider output{font-family:var(--mono);font-size:13px;color:var(--text);min-width:38px;text-align:right}
+/* abas internas (Mídia / Rodapé / Barra lateral) */
+.seg{display:inline-flex;gap:3px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:4px;margin-bottom:18px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--mut);padding:8px 15px;border-radius:8px;font-size:13.5px;cursor:pointer;white-space:nowrap}
+.seg button.active{background:var(--nav-bg);color:var(--nav-fg);font-weight:600}
+.seg button:hover:not(.active){color:var(--text)}
 .sheet{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:min(860px,100%);max-height:92vh;overflow:auto}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
 .sheet-head h3{font-size:17px;font-weight:700}
@@ -187,12 +197,18 @@ input.grow{flex:1;min-width:150px}
 .prev-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   color:#3A4356;font-family:var(--mono);font-size:12px;letter-spacing:2px;
   background:repeating-linear-gradient(135deg,#0A0F1A 0 12px,#0C1220 12px 24px);transition:left .3s,bottom .3s}
-.prev.has-wx .prev-stage{left:26%}
-.prev.has-ticker .prev-stage{bottom:16%}
-.prev-wx{position:absolute;left:0;top:0;bottom:0;width:26%;display:none;flex-direction:column;gap:4%;
-  padding:7% 5%;box-sizing:border-box;color:#fff;background:linear-gradient(165deg,#0B2A6B,#123A8C)}
+.prev{--pw:22%;--ph:12%}
+.prev.has-wx .prev-stage{left:var(--pw)}
+.prev.has-ticker .prev-stage{bottom:var(--ph)}
+.prev-wx{position:absolute;left:0;top:0;bottom:0;width:var(--pw);display:none;flex-direction:column;gap:3%;
+  padding:6% 4%;box-sizing:border-box;color:#fff;overflow:hidden;background:linear-gradient(165deg,#0B2A6B,#123A8C)}
 .prev.has-wx .prev-wx{display:flex}
-.prev.has-wx.has-ticker .prev-wx{bottom:16%}
+.prev.has-wx.has-ticker .prev-wx{bottom:var(--ph)}
+.prev-tom{font-size:.6vw;color:#8FA9E8;margin-top:auto;border-top:1px solid rgba(255,255,255,.18);padding-top:5%;white-space:nowrap}
+.ck{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mut);cursor:pointer}
+.ck input{accent-color:var(--acc);width:15px;height:15px}
+textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:13.5px;font-family:inherit;resize:vertical;min-height:74px}
+textarea:focus{border-color:var(--acc);outline:none}
 .prev-time{font-size:1.5vw;font-weight:800;line-height:1}
 .prev-temp{font-size:1.7vw;font-weight:800;margin-top:auto}
 .prev-cond{font-size:.8vw;color:#AEC4FF}
@@ -203,7 +219,7 @@ input.grow{flex:1;min-width:150px}
 .prev-ticker .pb{background:var(--acc);color:#fff;height:100%;display:flex;align-items:center;padding:0 2%;font-weight:800;font-size:1vw}
 .prev-ticker b{padding:0 2%;font-size:.8vw;background:rgba(255,255,255,.1);height:100%;display:flex;align-items:center;color:#fff}
 .prev-ticker .pt{padding:0 2%;font-size:.85vw;color:#EAF1FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
-@media(max-width:720px){.prev-time{font-size:4vw}.prev-temp{font-size:4.5vw}.prev-cond{font-size:2vw}.prev-city{font-size:1.8vw}.prev-ticker .pb{font-size:2.6vw}.prev-ticker b,.prev-ticker .pt{font-size:2.2vw}}
+@media(max-width:720px){.prev-time{font-size:4vw}.prev-temp{font-size:4.5vw}.prev-cond{font-size:2vw}.prev-city{font-size:1.8vw}.prev-tom{font-size:1.6vw}.prev-ticker .pb{font-size:2.6vw}.prev-ticker b,.prev-ticker .pt{font-size:2.2vw}}
 
 /* controles */
 .ctrl{border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:14px;background:var(--panel2)}
@@ -289,6 +305,7 @@ input.grow{flex:1;min-width:150px}
             <div class="prev-temp">☀️ 23°</div>
             <div class="prev-cond">Céu limpo</div>
             <div class="prev-city">📍 <span id="lmPvCity">—</span></div>
+            <div class="prev-tom" id="lmPvTom">Amanhã ⛅ 25°/17°</div>
           </div>
           <div class="prev-stage">SEU CONTEÚDO</div>
           <div class="prev-ticker"><span class="pb" id="lmPvDay">23</span><b>AVISOS</b><span class="pt" id="lmPvText">—</span></div>
@@ -296,31 +313,32 @@ input.grow{flex:1;min-width:150px}
         <div class="sub" style="margin-top:8px">Assim a tela ficará. O conteúdo da playlist ocupa a área central.</div>
       </div>
       <div>
-        <div class="ctrl" id="lmWxCtrl">
+        <div class="ctrl on">
           <div class="top">
-            <div><div class="t">🌦️ Painel de clima</div>
-              <div class="desc">Mostra hora, data e temperatura na lateral.</div></div>
-            <label class="sw"><input type="checkbox" id="lmWxOn" onchange="lmToggle()"><span></span></label>
+            <div><div class="t">🌦️ Barra lateral</div>
+              <div class="desc">Perfil de clima exibido na lateral desta tela.</div></div>
           </div>
           <div class="fields">
-            <div class="eyebrow" style="margin-bottom:6px">Localidade</div>
-            <div class="geo">
-              <input id="lmGeo" placeholder="Digite a cidade (ex.: Porto Alegre)" autocomplete="off"
-                     oninput="geoSearch(this.value)" onkeydown="geoKey(event)">
-              <div class="geo-list" id="lmGeoList"></div>
+            <select id="lmSidebar" onchange="lmPreview()" style="width:100%"></select>
+            <div class="slider" id="lmWRow">
+              <label>Largura da coluna</label>
+              <input type="range" id="lmWidth" min="10" max="45" step="1" oninput="lmPreview()">
+              <output id="lmWidthOut">22%</output>
             </div>
-            <div class="picked" id="lmPicked"></div>
           </div>
         </div>
-        <div class="ctrl" id="lmTkCtrl">
+        <div class="ctrl on">
           <div class="top">
-            <div><div class="t">📰 Rodapé de avisos</div>
-              <div class="desc">Faixa com mensagens que rolam no pé da tela.</div></div>
-            <label class="sw"><input type="checkbox" id="lmTkOn" onchange="lmToggle()"><span></span></label>
+            <div><div class="t">📰 Faixas de avisos</div>
+              <div class="desc">Marque as faixas que passam no rodapé desta tela.</div></div>
           </div>
           <div class="fields">
-            <div class="eyebrow" style="margin-bottom:6px">Mensagens (uma por linha)</div>
-            <textarea id="lmTkText" placeholder="Bem-vindos à nossa empresa!&#10;Reunião geral sexta-feira às 15h" oninput="lmPreview()"></textarea>
+            <div class="checks" id="lmTickers"></div>
+            <div class="slider">
+              <label>Altura do rodapé</label>
+              <input type="range" id="lmHeight" min="6" max="30" step="1" oninput="lmPreview()">
+              <output id="lmHeightOut">12%</output>
+            </div>
           </div>
         </div>
       </div>
@@ -328,6 +346,27 @@ input.grow{flex:1;min-width:150px}
     <div class="sheet-foot">
       <button class="btn ghost" onclick="closeLayout()">Cancelar</button>
       <button class="btn" onclick="saveLayout()">Salvar e aplicar</button>
+    </div>
+  </div>
+</div>
+
+<div id="assignModal" onclick="if(event.target===this)closeAssign()">
+  <div class="sheet" style="width:min(520px,100%)">
+    <div class="sheet-head">
+      <h3>📺 Aplicar em telas — <span id="asName"></span></h3>
+      <button class="icobtn" onclick="closeAssign()" title="Fechar">✕</button>
+    </div>
+    <div style="padding:18px 22px">
+      <div class="row" style="margin-bottom:12px">
+        <button class="btn ghost sm" onclick="asAll(true)">Selecionar todas</button>
+        <button class="btn ghost sm" onclick="asAll(false)">Nenhuma</button>
+        <span class="eyebrow" id="asCount" style="margin-left:auto"></span>
+      </div>
+      <div id="asList" class="list"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn ghost" onclick="closeAssign()">Cancelar</button>
+      <button class="btn" onclick="saveAssign()">Aplicar</button>
     </div>
   </div>
 </div>
@@ -492,13 +531,24 @@ const assignPl   = (pl,dev) => pl && api('/playlists/'+pl+'/assign',{method:'POS
 const cmd        = (id,c) => api('/devices/'+id+'/command',{method:'POST',body:{command:c}}).then(r=>toast(r.delivered?'Comando enviado':'Tela offline — comando não entregue',r.delivered?'ok':'err')).catch(e=>toast(e.message,'err'));
 const delDev     = id => confirm('Remover esta tela do painel?') && api('/devices/'+id,{method:'DELETE'}).then(()=>{toast('Tela removida');loadDevices()}).catch(e=>toast(e.message,'err'));
 
-/* ================= PLAYLISTS ================= */
-async function loadPlaylists(){
+/* ========== PLAYLISTS: mídia · rodapé · barra lateral ========== */
+let plSub = 'media';
+function loadPlaylists(sub){
+  if (typeof sub === 'string') plSub = sub;   // ignora argumentos vindos de .then()
+  ({media:loadMediaPlaylists, ticker:loadTickers, sidebar:loadSidebars})[plSub]();
+}
+function plHead(){
+  const tabs=[['media','🎬 Mídia'],['ticker','📰 Rodapé'],['sidebar','🌦️ Barra lateral']];
+  return `<div class="pagehead"><h2>Playlists</h2></div>
+    <div class="seg">${tabs.map(([k,l])=>
+      `<button class="${plSub===k?'active':''}" onclick="loadPlaylists('${k}')">${l}</button>`).join('')}</div>`;
+}
+
+async function loadMediaPlaylists(){
   const [pls,med]=await Promise.all([api('/playlists'),api('/media')]);
   window._pls=pls;
-  $('#tab-playlists').innerHTML =
-    `<div class="pagehead"><h2>Playlists</h2></div>
-    <div class="card"><div class="row">
+  $('#tab-playlists').innerHTML = plHead()+
+    `<div class="card"><div class="row">
       <input id="plname" class="grow" placeholder="Nome da nova playlist">
       <button class="btn" onclick="createPl()">Criar playlist</button>
     </div></div>`+
@@ -538,6 +588,143 @@ function addItem(id){const m=$('#add-'+id).value;if(!m)return;const items=itemsO
 function rmItem(id,i){const items=itemsOf(id);items.splice(i,1);saveItems(id,items)}
 function movePl(id,i,dir){const items=itemsOf(id);const j=i+dir;if(j<0||j>=items.length)return;
   [items[i],items[j]]=[items[j],items[i]];saveItems(id,items)}
+
+/* ---------- Faixas de rodapé ---------- */
+async function loadTickers(){
+  const [tks,devs]=await Promise.all([api('/tickers'),api('/devices')]);
+  window._devs=devs;
+  $('#tab-playlists').innerHTML = plHead()+
+    `<div class="card"><h3>Nova faixa de avisos</h3>
+      <div class="row" style="margin-bottom:9px">
+        <input id="tkname" class="grow" placeholder="Nome da faixa (ex.: Avisos gerais)">
+      </div>
+      <textarea id="tktext" placeholder="Uma mensagem por linha&#10;Bem-vindos à nossa empresa!&#10;Reunião geral sexta-feira às 15h"></textarea>
+      <div class="row" style="margin-top:10px;justify-content:flex-end">
+        <button class="btn" onclick="createTicker()">Criar faixa</button></div>
+    </div>`+
+    (tks.length ? tks.map(t=>{
+      const msgs=(t.text||'').split('\n').filter(s=>s.trim());
+      const names=t.device_ids.map(id=>(devs.find(d=>d.id===id)||{}).name).filter(Boolean);
+      return `<div class="card">
+        <h3><span>${esc(t.name)} <span class="eyebrow" style="margin-left:8px">${msgs.length} mensagem${msgs.length===1?'':'s'}</span></span>
+          <span class="row">
+            <button class="btn ghost sm" onclick="openAssign('ticker','${t.id}','${esc(t.name)}')">📺 Aplicar em telas</button>
+            <button class="btn danger sm" onclick="delTicker('${t.id}')">Excluir</button></span></h3>
+        <textarea id="tk-${t.id}" oninput="tkDirty('${t.id}')">${esc(t.text||'')}</textarea>
+        <div class="row" style="margin-top:9px">
+          <div class="grow">${names.length
+            ? names.map(n=>`<span class="chip">${esc(n)}</span>`).join('')
+            : '<span class="sub">Nenhuma tela — esta faixa não está no ar.</span>'}</div>
+          <button class="btn sm hidden" id="tksave-${t.id}" onclick="saveTicker('${t.id}')">Salvar mensagens</button>
+        </div>
+      </div>`}).join('')
+    : `<div class="card"><div class="empty"><div class="eyebrow">Nenhuma faixa</div>
+       Crie faixas de avisos e aplique em uma tela, em várias ou em todas.</div></div>`);
+}
+const tkDirty = id => $('#tksave-'+id).classList.remove('hidden');
+function createTicker(){
+  const name=$('#tkname').value.trim(); if(!name) return toast('Dê um nome à faixa','err');
+  api('/tickers',{method:'POST',body:{name,text:$('#tktext').value}})
+    .then(()=>{toast('Faixa criada','ok');loadTickers()}).catch(e=>toast(e.message,'err'));
+}
+const saveTicker = id => api('/tickers/'+id,{method:'PUT',body:{text:$('#tk-'+id).value}})
+  .then(()=>{toast('Mensagens salvas — telas notificadas','ok');loadTickers()}).catch(e=>toast(e.message,'err'));
+const delTicker = id => confirm('Excluir esta faixa? Ela sairá de todas as telas.') &&
+  api('/tickers/'+id,{method:'DELETE'}).then(()=>{toast('Faixa excluída');loadTickers()}).catch(e=>toast(e.message,'err'));
+
+/* ---------- Perfis de barra lateral (clima) ---------- */
+let sbPick = null;   // localidade escolhida no formulário de criação
+async function loadSidebars(){
+  const [sbs,devs]=await Promise.all([api('/sidebars'),api('/devices')]);
+  window._devs=devs; sbPick=null;
+  $('#tab-playlists').innerHTML = plHead()+
+    `<div class="card"><h3>Novo perfil de clima</h3>
+      <div class="row" style="margin-bottom:9px">
+        <input id="sbname" class="grow" placeholder="Nome do perfil (ex.: Matriz — Porto Alegre)"></div>
+      <div class="row" style="align-items:flex-start">
+        <div class="geo" style="flex:1;min-width:190px">
+          <input id="sbGeo" placeholder="Cidade (ex.: Porto Alegre)" autocomplete="off"
+                 oninput="geoSearch(this.value)" onkeydown="geoKey(event)">
+          <div class="geo-list" id="sbGeoList"></div>
+        </div>
+        <span class="sub" style="padding:10px 0">ou</span>
+        <input id="sbCep" placeholder="CEP (00000-000)" style="max-width:150px" onkeydown="if(event.key==='Enter')lookupCep()">
+        <button class="btn ghost sm" onclick="lookupCep()">Buscar CEP</button>
+      </div>
+      <div class="picked" id="sbPicked" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <label class="ck"><input type="checkbox" id="sbTom" checked> Mostrar previsão de amanhã</label>
+        <button class="btn" onclick="createSidebar()">Criar perfil</button></div>
+    </div>`+
+    (sbs.length ? `<div class="card"><div class="list">`+sbs.map(s=>{
+      const names=s.device_ids.map(id=>(devs.find(d=>d.id===id)||{}).name).filter(Boolean);
+      return `<div class="item">
+        <div class="grow"><b>${esc(s.name)}</b>
+          <div class="sub">📍 ${esc(s.city||'')}${s.postal_code?' · CEP '+esc(s.postal_code):''}${s.show_tomorrow?' · com previsão de amanhã':''}</div>
+          <div style="margin-top:5px">${names.length
+            ? names.map(n=>`<span class="chip">${esc(n)}</span>`).join('')
+            : '<span class="sub">Nenhuma tela usando este perfil.</span>'}</div>
+        </div>
+        <button class="btn ghost sm" onclick="openAssign('sidebar','${s.id}','${esc(s.name)}')">📺 Aplicar em telas</button>
+        <button class="icobtn del" onclick="delSidebar('${s.id}')" title="Excluir">✕</button>
+      </div>`}).join('')+`</div></div>`
+    : `<div class="card"><div class="empty"><div class="eyebrow">Nenhum perfil</div>
+       Crie um perfil de clima e aplique nas telas dessa localidade.</div></div>`);
+}
+function renderSbPicked(){
+  $('#sbPicked').innerHTML = sbPick
+    ? `✓ <span>${esc(sbPick.label)}</span>`
+    : '<span class="sub">Escolha a cidade ou informe o CEP.</span>';
+}
+async function lookupCep(){
+  const cep=$('#sbCep').value.replace(/\D/g,'');
+  if(cep.length!==8) return toast('CEP deve ter 8 dígitos','err');
+  try{
+    const r=await api('/weather/cep?cep='+cep);
+    sbPick={label:`${r.city}/${r.region}${r.street?' — '+r.street:''}`,city:`${r.city}, ${r.region}`,
+            postal_code:r.postal_code,lat:r.lat,lon:r.lon};
+    renderSbPicked();
+    if(!$('#sbname').value.trim()) $('#sbname').value=r.city;
+  }catch(e){ toast(e.message,'err') }
+}
+function createSidebar(){
+  const name=$('#sbname').value.trim();
+  if(!name) return toast('Dê um nome ao perfil','err');
+  if(!sbPick) return toast('Escolha a cidade ou informe o CEP','err');
+  api('/sidebars',{method:'POST',body:{name,city:sbPick.city,postal_code:sbPick.postal_code||null,
+      lat:sbPick.lat,lon:sbPick.lon,show_tomorrow:$('#sbTom').checked}})
+    .then(()=>{toast('Perfil criado','ok');loadSidebars()}).catch(e=>toast(e.message,'err'));
+}
+const delSidebar = id => confirm('Excluir este perfil? As telas que o usam ficam sem barra lateral.') &&
+  api('/sidebars/'+id,{method:'DELETE'}).then(()=>{toast('Perfil excluído');loadSidebars()}).catch(e=>toast(e.message,'err'));
+
+/* ---------- Modal: aplicar em telas (uma, várias ou todas) ---------- */
+let asKind=null, asId=null;
+async function openAssign(kind,id,name){
+  asKind=kind; asId=id;
+  $('#asName').textContent=name;
+  const [devs,items]=await Promise.all([api('/devices'),api('/'+kind+'s')]);
+  const cur=(items.find(x=>x.id===id)||{}).device_ids||[];
+  $('#asList').innerHTML = devs.length ? devs.map(d=>`<div class="item">
+      <label class="ck grow"><input type="checkbox" class="asdev" value="${d.id}" ${cur.includes(d.id)?'checked':''}
+        onchange="asCount()"> <b>${esc(d.name)}</b></label>
+      <span class="sub">${esc(d.group_name||'sem grupo')}</span></div>`).join('')
+    : '<div class="empty">Nenhuma tela cadastrada ainda.</div>';
+  asCount();
+  $('#assignModal').classList.add('on');
+}
+function closeAssign(){ $('#assignModal').classList.remove('on') }
+function asAll(v){ document.querySelectorAll('.asdev').forEach(c=>c.checked=v); asCount() }
+function asCount(){
+  const n=document.querySelectorAll('.asdev:checked').length;
+  $('#asCount').textContent = n+' selecionada'+(n===1?'':'s');
+}
+function saveAssign(){
+  const ids=[...document.querySelectorAll('.asdev:checked')].map(c=>c.value);
+  api('/'+asKind+'s/'+asId+'/devices',{method:'PUT',body:{device_ids:ids}})
+    .then(()=>{toast('Aplicado em '+ids.length+' tela(s)','ok');closeAssign();loadPlaylists()})
+    .catch(e=>toast(e.message,'err'));
+}
 
 /* ================= MÍDIA ================= */
 async function loadMedia(){
@@ -668,72 +855,26 @@ function resetPass(id,email){
 const delUser=(id,email)=>confirm('Excluir o usuário '+email+'?')&&api('/users/'+id,{method:'DELETE'})
   .then(()=>{toast('Usuário excluído');loadUsers()}).catch(e=>toast(e.message,'err'));
 
-/* ================= EDITOR DE LAYOUT ================= */
-let lmDev = null, lmState = null, geoTimer = null, geoHi = -1;
-
-function openLayout(id){
-  lmDev = (window._devs||[]).find(d=>d.id===id);
-  if(!lmDev) return;
-  lmState = {
-    weather_enabled: !!lmDev.weather_enabled,
-    weather_location: lmDev.weather_location || '',
-    weather_lat: lmDev.weather_lat, weather_lon: lmDev.weather_lon,
-    ticker_enabled: !!lmDev.ticker_enabled,
-    ticker_text: lmDev.ticker_text || ''
-  };
-  $('#lmName').textContent = lmDev.name;
-  $('#lmWxOn').checked = lmState.weather_enabled;
-  $('#lmTkOn').checked = lmState.ticker_enabled;
-  $('#lmGeo').value = '';
-  $('#lmGeoList').classList.remove('on');
-  $('#lmTkText').value = lmState.ticker_text;
-  renderPicked();
-  lmToggle();
-  $('#modal').classList.add('on');
-}
-function closeLayout(){ $('#modal').classList.remove('on'); }
-
-function renderPicked(){
-  $('#lmPicked').innerHTML = lmState.weather_location
-    ? `✓ <span>${esc(lmState.weather_location)}</span>`
-    : '<span class="sub">Nenhuma localidade escolhida ainda.</span>';
-}
-function lmToggle(){
-  $('#lmWxCtrl').classList.toggle('on', $('#lmWxOn').checked);
-  $('#lmTkCtrl').classList.toggle('on', $('#lmTkOn').checked);
-  lmPreview();
-}
-function lmPreview(){
-  const prev = $('#lmPrev');
-  prev.classList.toggle('has-wx', $('#lmWxOn').checked);
-  const txt = $('#lmTkText').value.trim();
-  prev.classList.toggle('has-ticker', $('#lmTkOn').checked && !!txt);
-  $('#lmPvCity').textContent = lmState.weather_location || 'escolha a cidade';
-  $('#lmPvText').textContent = txt ? txt.split('\n').filter(Boolean).join('  •  ') : 'suas mensagens aqui';
-  const now = new Date();
-  $('#lmPvDay').textContent = String(now.getDate()).padStart(2,'0');
-}
-
+/* ========== AUTOCOMPLETE DE CIDADE (usado no perfil de clima) ========== */
+let geoTimer = null, geoHi = -1;
 function geoSearch(q){
   clearTimeout(geoTimer); geoHi = -1;
-  if(q.trim().length < 2){ $('#lmGeoList').classList.remove('on'); return; }
+  const box = $('#sbGeoList');
+  if(q.trim().length < 2){ box.classList.remove('on'); return; }
   geoTimer = setTimeout(async ()=>{
     try{
       const list = await api('/weather/search?q='+encodeURIComponent(q.trim()));
-      const box = $('#lmGeoList');
       if(!list.length){ box.classList.remove('on'); return; }
-      box.innerHTML = list.map((r,i)=>{
-        const label = [r.name, r.region, r.country].filter(Boolean).join(', ');
-        return `<button data-i="${i}" onmousedown="event.preventDefault()" onclick='pickGeo(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
-          ${esc(r.name)} <span class="muted">${esc([r.region,r.country].filter(Boolean).join(', '))}</span></button>`;
-      }).join('');
+      box.innerHTML = list.map((r,i)=>
+        `<button data-i="${i}" onmousedown="event.preventDefault()" onclick='pickGeo(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+          ${esc(r.name)} <span class="muted">${esc([r.region,r.country].filter(Boolean).join(', '))}</span></button>`).join('');
       box._items = list;
       box.classList.add('on');
     }catch(e){ toast(e.message,'err'); }
   }, 300);
 }
 function geoKey(e){
-  const box = $('#lmGeoList'); if(!box.classList.contains('on')) return;
+  const box = $('#sbGeoList'); if(!box.classList.contains('on')) return;
   const btns = [...box.querySelectorAll('button')];
   if(e.key==='ArrowDown'){ e.preventDefault(); geoHi=Math.min(geoHi+1,btns.length-1); }
   else if(e.key==='ArrowUp'){ e.preventDefault(); geoHi=Math.max(geoHi-1,0); }
@@ -742,23 +883,61 @@ function geoKey(e){
   btns.forEach((b,i)=>b.classList.toggle('hi',i===geoHi));
 }
 function pickGeo(r){
-  lmState.weather_location = [r.name, r.region].filter(Boolean).join(', ');
-  lmState.weather_lat = r.lat; lmState.weather_lon = r.lon;
-  $('#lmGeo').value = '';
-  $('#lmGeoList').classList.remove('on');
-  renderPicked(); lmPreview();
+  const label = [r.name, r.region, r.country].filter(Boolean).join(', ');
+  sbPick = { label, city: [r.name, r.region].filter(Boolean).join(', '), lat: r.lat, lon: r.lon };
+  $('#sbGeo').value = '';
+  $('#sbGeoList').classList.remove('on');
+  renderSbPicked();
+  if(!$('#sbname').value.trim()) $('#sbname').value = r.name;
+}
+
+/* ========== EDITOR DE LAYOUT DA TELA ========== */
+let lmDev = null;
+async function openLayout(id){
+  lmDev = (window._devs||[]).find(d=>d.id===id);
+  if(!lmDev) return;
+  const [sbs,tks] = await Promise.all([api('/sidebars'),api('/tickers')]);
+  window._sbs = sbs;
+  $('#lmName').textContent = lmDev.name;
+  $('#lmSidebar').innerHTML = `<option value="">— sem barra lateral —</option>`+
+    sbs.map(s=>`<option value="${s.id}" ${s.id===lmDev.sidebar_id?'selected':''}>${esc(s.name)}</option>`).join('');
+  $('#lmTickers').innerHTML = tks.length
+    ? tks.map(t=>`<label><input type="checkbox" class="lmtk" value="${t.id}"
+        ${t.device_ids.includes(lmDev.id)?'checked':''} onchange="lmPreview()">${esc(t.name)}</label>`).join('')
+    : '<span class="sub">Nenhuma faixa criada — crie em Playlists → Rodapé.</span>';
+  $('#lmWidth').value = lmDev.sidebar_width || 22;
+  $('#lmHeight').value = lmDev.ticker_height || 12;
+  lmPreview();
+  $('#modal').classList.add('on');
+}
+function closeLayout(){ $('#modal').classList.remove('on'); }
+
+function lmPreview(){
+  const prev = $('#lmPrev');
+  const sbId = $('#lmSidebar').value;
+  const tkIds = [...document.querySelectorAll('.lmtk:checked')].map(c=>c.value);
+  const w = $('#lmWidth').value, h = $('#lmHeight').value;
+  $('#lmWidthOut').textContent = w+'%';
+  $('#lmHeightOut').textContent = h+'%';
+  prev.style.setProperty('--pw', w+'%');
+  prev.style.setProperty('--ph', h+'%');
+  prev.classList.toggle('has-wx', !!sbId);
+  prev.classList.toggle('has-ticker', tkIds.length>0);
+  const sb = (window._sbs||[]).find(s=>s.id===sbId);
+  $('#lmPvCity').textContent = sb ? (sb.city||sb.name) : '';
+  $('#lmPvTom').style.display = sb && sb.show_tomorrow ? '' : 'none';
+  $('#lmPvText').textContent = tkIds.length
+    ? tkIds.length+' faixa'+(tkIds.length===1?'':'s')+' de avisos no rodapé'
+    : 'sem faixas';
+  $('#lmPvDay').textContent = String(new Date().getDate()).padStart(2,'0');
 }
 
 function saveLayout(){
-  const wxOn = $('#lmWxOn').checked;
-  if(wxOn && (lmState.weather_lat==null || lmState.weather_lon==null))
-    return toast('Escolha uma localidade para o painel de clima','err');
   const body = {
-    weather_enabled: wxOn,
-    weather_location: lmState.weather_location,
-    weather_lat: lmState.weather_lat, weather_lon: lmState.weather_lon,
-    ticker_enabled: $('#lmTkOn').checked,
-    ticker_text: $('#lmTkText').value.trim()
+    sidebar_id: $('#lmSidebar').value || null,
+    sidebar_width: Number($('#lmWidth').value),
+    ticker_height: Number($('#lmHeight').value),
+    ticker_ids: [...document.querySelectorAll('.lmtk:checked')].map(c=>c.value)
   };
   api('/devices/'+lmDev.id+'/layout',{method:'PUT',body})
     .then(()=>{ toast('Layout aplicado — a tela vai atualizar em instantes','ok'); closeLayout(); loadDevices(true); })

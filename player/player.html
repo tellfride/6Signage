@@ -3,51 +3,58 @@
 <head>
 <meta charset="utf-8">
 <style>
-:root{--wx-bg1:#0B2A6B;--wx-bg2:#123A8C;--accent:#5B8CFF}
+:root{--wx-bg1:#0B2A6B;--wx-bg2:#123A8C;--accent:#5B8CFF;--wx-w:22%;--tk-h:12%}
 html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;cursor:none;
   font-family:system-ui,'Segoe UI',sans-serif;color:#fff}
 
-/* palco do conteúdo (encolhe quando há overlays) */
+/* palco do conteúdo (encolhe conforme os overlays ativos) */
 #stage{position:absolute;inset:0;transition:left .35s,bottom .35s;overflow:hidden}
-body.has-wx #stage{left:22%}
-body.has-ticker #stage{bottom:12%}
+body.has-wx #stage{left:var(--wx-w)}
+body.has-ticker #stage{bottom:var(--tk-h)}
 .slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s;background:#000}
 .slide.show{opacity:1}
 .slide.cut{transition:none}
 
-/* painel de clima (barra lateral) */
-#wx{position:absolute;left:0;top:0;bottom:0;width:22%;display:none;flex-direction:column;
-  padding:4vh 1.6vw;gap:2.4vh;box-sizing:border-box;color:#fff;
+/* ---- barra lateral (clima) — tudo em em, escalado pela largura do painel ---- */
+#wx{position:absolute;left:0;top:0;bottom:0;width:var(--wx-w);display:none;flex-direction:column;
+  padding:1.2em .9em;gap:.6em;box-sizing:border-box;font-size:16px;overflow:hidden;
   background:linear-gradient(165deg,var(--wx-bg1),var(--wx-bg2));box-shadow:inset -6px 0 26px rgba(0,0,0,.35)}
 body.has-wx #wx{display:flex}
-body.has-wx.has-ticker #wx{bottom:12%}
-.wx-clock #wxTime{font-size:5.2vw;font-weight:800;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums}
-.wx-clock #wxDate{font-size:1.05vw;color:#AEC4FF;margin-top:.6vh;text-transform:capitalize}
-.wx-main{display:flex;align-items:center;gap:.6vw;margin-top:auto}
-.wx-icon{font-size:5vw;line-height:1}
-.wx-temp{font-size:6vw;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-.wx-cond{font-size:1.5vw;font-weight:600;color:#E6EEFF}
-.wx-city{font-size:1.25vw;color:#AEC4FF;display:flex;align-items:center;gap:.4vw}
-.wx-city::before{content:'📍'}
-.wx-extra{display:flex;gap:1.4vw;font-size:1vw;color:#AEC4FF;border-top:1px solid rgba(255,255,255,.15);padding-top:1.6vh}
+body.has-wx.has-ticker #wx{bottom:var(--tk-h)}
+#wxTime{font-size:2.4em;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+#wxDate{font-size:.62em;color:#AEC4FF;margin-top:.4em;text-transform:capitalize}
+.wx-now{margin-top:auto}
+.wx-main{display:flex;align-items:center;gap:.15em}
+#wxIcon{font-size:1.9em;line-height:1}
+#wxTemp{font-size:2.6em;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#wxCond{font-size:.8em;font-weight:600;color:#E6EEFF;margin-top:.15em}
+#wxCity{font-size:.6em;color:#AEC4FF;margin-top:.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#wxTom{font-size:.68em;color:#CFE0FF;border-top:1px solid rgba(255,255,255,.16);padding-top:.7em;
+  display:flex;align-items:center;gap:.35em;white-space:nowrap}
+#wxTom .tm-lb{text-transform:uppercase;letter-spacing:.12em;color:#8FA9E8;font-size:.8em;font-weight:700}
+#wxTom b{font-weight:800}
+#wxTom .tm-min{color:#8FA9E8}
+.wx-extra{display:flex;gap:.9em;font-size:.58em;color:#AEC4FF;
+  border-top:1px solid rgba(255,255,255,.16);padding-top:.7em}
 
-/* rodapé de avisos (ticker) */
-#ticker{position:absolute;left:0;right:0;bottom:0;height:12%;display:none;align-items:stretch;
-  background:linear-gradient(90deg,#081F52,#0E2E73);border-top:2px solid var(--accent)}
+/* ---- rodapé de avisos ---- */
+#ticker{position:absolute;left:0;right:0;bottom:0;height:var(--tk-h);display:none;align-items:stretch;
+  font-size:24px;overflow:hidden;background:linear-gradient(90deg,#081F52,#0E2E73);border-top:2px solid var(--accent)}
 body.has-ticker #ticker{display:flex}
 .tick-badge{display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:var(--accent);color:#fff;padding:0 1.6vw;min-width:7vw}
-.tick-badge #tickDay{font-size:2.6vw;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-.tick-badge #tickMon{font-size:1vw;font-weight:700;letter-spacing:2px}
-.tick-label{display:flex;align-items:center;padding:0 1.4vw;font-weight:800;font-size:1.4vw;
-  letter-spacing:1px;color:#fff;background:rgba(255,255,255,.08)}
-.tick-view{flex:1;overflow:hidden;display:flex;align-items:center}
-.tick-track{display:inline-block;white-space:nowrap;font-size:1.9vw;font-weight:600;color:#EAF1FF;
-  padding-left:100%;will-change:transform;animation:scroll linear infinite}
+  background:var(--accent);color:#fff;padding:0 .7em;min-width:2.8em}
+#tickDay{font-size:1.15em;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#tickMon{font-size:.4em;font-weight:700;letter-spacing:.18em}
+.tick-label{display:flex;align-items:center;padding:0 .7em;font-weight:800;font-size:.6em;
+  letter-spacing:.08em;color:#fff;background:rgba(255,255,255,.08);white-space:nowrap}
+.tick-view{flex:1;overflow:hidden;display:flex;align-items:center;min-width:0}
+/* dois segmentos idênticos + translate de -50% = rolagem contínua e sem buraco,
+   as mensagens percorrem a faixa inteira até a borda esquerda */
+.tick-track{display:flex;white-space:nowrap;will-change:transform;font-size:.92em;font-weight:600;color:#EAF1FF}
+.tick-seg{flex:0 0 auto;padding-right:3em}
 @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-@media (prefers-reduced-motion: reduce){.tick-track{animation-duration:1s !important}}
 
-/* status/espera (dentro do palco) */
+/* ---- status/espera (dentro do palco) ---- */
 #statusWrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:14px;color:#8A93A8;font-family:ui-monospace,Consolas,monospace;font-size:18px;text-align:center;padding:40px;background:#000}
 #statusWrap .tv{width:76px;height:56px;border:3px solid var(--accent);border-radius:8px;position:relative;opacity:.9}
@@ -67,11 +74,14 @@ body.has-ticker #ticker{display:flex}
 </div>
 
 <aside id="wx">
-  <div class="wx-clock"><div id="wxTime">--:--</div><div id="wxDate">—</div></div>
-  <div class="wx-main"><span id="wxIcon" class="wx-icon">🌡️</span><span id="wxTemp" class="wx-temp">--°</span></div>
-  <div id="wxCond" class="wx-cond">—</div>
-  <div id="wxCity" class="wx-city">—</div>
-  <div class="wx-extra"><span id="wxHum">💧 --%</span><span id="wxWind">🌬 -- km/h</span></div>
+  <div><div id="wxTime">--:--</div><div id="wxDate">—</div></div>
+  <div class="wx-now">
+    <div class="wx-main"><span id="wxIcon">🌡️</span><span id="wxTemp">--°</span></div>
+    <div id="wxCond">—</div>
+    <div id="wxCity">—</div>
+  </div>
+  <div id="wxTom"></div>
+  <div class="wx-extra"><span id="wxHum">💧 --%</span><span id="wxWind">🌬 --</span></div>
 </aside>
 
 <footer id="ticker">
@@ -84,6 +94,7 @@ body.has-ticker #ticker{display:flex}
 let cfg, manifest = { items: [] }, idx = 0, timer = null, current = null, paused = false, clockTimer = null;
 const $ = id => document.getElementById(id);
 const stage = $('stage'), status = $('statusWrap'), statusText = $('statusText');
+const TICKER_SPEED = 110; // px por segundo
 
 async function register() {
   const r = await fetch(cfg.server + '/api/devices/register', {
@@ -91,7 +102,7 @@ async function register() {
     body: JSON.stringify({
       device_key: cfg.deviceKey, device_name: cfg.deviceName,
       resolution: `${screen.width}x${screen.height}`,
-      os_version: cfg.osVersion || navigator.platform, client_version: '0.3.0'
+      os_version: cfg.osVersion || navigator.platform, client_version: '0.4.0'
     })
   });
   return r.json();
@@ -101,7 +112,7 @@ async function syncManifest() {
   try {
     const r = await fetch(`${cfg.server}/api/player/manifest?device_key=${cfg.deviceKey}`);
     const m = await r.json();
-    renderLayout(m.layout);                          // overlays sempre atualizam
+    renderLayout(m.layout);
     const changed = JSON.stringify(m.items) !== JSON.stringify(manifest.items);
     manifest = m;
     if (!m.items.length) {
@@ -122,7 +133,7 @@ async function syncManifest() {
   }
 }
 
-/* ---------- overlays: clima + rodapé ---------- */
+/* ---------- overlays ---------- */
 function wmo(code) {
   const m = {0:['☀️','Céu limpo'],1:['🌤️','Predom. limpo'],2:['⛅','Parc. nublado'],3:['☁️','Nublado'],
     45:['🌫️','Nevoeiro'],48:['🌫️','Nevoeiro'],51:['🌦️','Garoa'],53:['🌦️','Garoa'],55:['🌦️','Garoa forte'],
@@ -141,31 +152,68 @@ function tickClock() {
   $('tickDay').textContent = String(now.getDate()).padStart(2,'0');
   $('tickMon').textContent = meses[now.getMonth()].toUpperCase();
 }
+
+let tickerSig = '';
+function setTicker(msg) {
+  const view = document.querySelector('.tick-view'), track = $('tickTrack');
+  const sig = msg + '|' + view.clientWidth + '|' + $('ticker').style.fontSize;
+  if (sig === tickerSig) return;           // não reinicia a animação a cada sincronismo
+  tickerSig = sig;
+  track.style.animation = 'none';
+  track.innerHTML = '';
+  const seg = document.createElement('span');
+  seg.className = 'tick-seg';
+  seg.textContent = msg;
+  track.appendChild(seg);
+  // repete até o segmento cobrir a largura visível (senão sobra um vão no loop)
+  let guard = 0;
+  while (seg.offsetWidth < view.clientWidth && guard++ < 30) seg.textContent += '   •   ' + msg;
+  track.appendChild(seg.cloneNode(true));  // 2 segmentos idênticos = loop perfeito
+  const dur = Math.max(8, seg.offsetWidth / TICKER_SPEED);
+  void track.offsetWidth;                  // reflow para reiniciar a animação
+  track.style.animation = `scroll ${dur}s linear infinite`;
+}
+
 function renderLayout(L) {
   L = L || {};
   const wx = L.weather || {}, tk = L.ticker || {};
+  const msg = (tk.text || '').split('\n').map(s => s.trim()).filter(Boolean).join('   •   ');
+  const tickerOn = !!(tk.enabled && msg);
+
   document.body.classList.toggle('has-wx', !!wx.enabled);
+  document.body.classList.toggle('has-ticker', tickerOn);
+  document.documentElement.style.setProperty('--wx-w', (wx.width || 22) + '%');
+  document.documentElement.style.setProperty('--tk-h', (tk.height || 12) + '%');
+
   if (wx.enabled) {
     const [icon, text] = wmo(wx.code);
     $('wxIcon').textContent = icon;
     $('wxTemp').textContent = (wx.temp != null ? wx.temp : '--') + '°';
     $('wxCond').textContent = wx.temp != null ? text : 'sem dados';
-    $('wxCity').textContent = wx.city || '';
+    $('wxCity').textContent = '📍 ' + (wx.city || '');
     $('wxHum').textContent = '💧 ' + (wx.humidity != null ? wx.humidity + '%' : '--');
     $('wxWind').textContent = '🌬 ' + (wx.wind != null ? wx.wind + ' km/h' : '--');
+    if (wx.tomorrow) {
+      const [ti] = wmo(wx.tomorrow.code);
+      $('wxTom').innerHTML = `<span class="tm-lb">Amanhã</span> ${ti} <b>${wx.tomorrow.max}°</b>` +
+        `<span class="tm-min">/ ${wx.tomorrow.min}°</span>`;
+      $('wxTom').style.display = 'flex';
+    } else $('wxTom').style.display = 'none';
   }
-  const msg = (tk.text || '').trim();
-  const tickerOn = !!(tk.enabled && msg);
-  document.body.classList.toggle('has-ticker', tickerOn);
-  if (tickerOn) {
-    const parts = msg.split('\n').map(s => s.trim()).filter(Boolean).join('  •  ') + '  •  ';
-    $('tickTrack').textContent = parts + parts;
-    $('tickTrack').style.animationDuration = Math.max(14, parts.length * 0.28) + 's';
-  }
+
+  // escala tipográfica proporcional ao tamanho escolhido para cada faixa
+  requestAnimationFrame(() => {
+    const wxEl = $('wx'), tkEl = $('ticker');
+    if (wxEl.clientWidth) wxEl.style.fontSize = Math.max(10, wxEl.clientWidth / 13) + 'px';
+    if (tkEl.clientHeight) tkEl.style.fontSize = Math.max(10, tkEl.clientHeight / 3) + 'px';
+    if (tickerOn) setTicker(msg);
+  });
+
   const needClock = wx.enabled || tickerOn;
   if (needClock && !clockTimer) { tickClock(); clockTimer = setInterval(tickClock, 1000); }
   if (!needClock && clockTimer) { clearInterval(clockTimer); clockTimer = null; }
 }
+window.addEventListener('resize', () => { tickerSig = ''; renderLayout(manifest.layout); });
 
 /* ---------- reprodução ---------- */
 function stopPlayback() { clearTimeout(timer); if (current) { current.remove(); current = null; } }

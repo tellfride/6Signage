@@ -1,5 +1,6 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
+const crypto = require('crypto');
 
 const db = new DatabaseSync(path.join(__dirname, '..', '6signage.db'));
 db.exec('PRAGMA journal_mode = WAL');
@@ -87,16 +88,71 @@ CREATE INDEX IF NOT EXISTS idx_items_playlist ON playlist_items(playlist_id, pos
 CREATE INDEX IF NOT EXISTS idx_logs_device ON execution_logs(device_id, timestamp);
 `);
 
-// Migração: colunas de layout/overlays por dispositivo (painel de clima e rodapé)
+// Faixas de rodapé (avisos) — reutilizáveis, N:N com telas
+db.exec(`
+CREATE TABLE IF NOT EXISTS tickers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS device_tickers (
+  device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  ticker_id TEXT NOT NULL REFERENCES tickers(id) ON DELETE CASCADE,
+  PRIMARY KEY (device_id, ticker_id)
+);
+
+-- Perfis de barra lateral (clima) — um perfil serve várias telas
+CREATE TABLE IF NOT EXISTS sidebars (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  city TEXT,
+  postal_code TEXT,
+  lat REAL,
+  lon REAL,
+  show_tomorrow INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`);
+
+// Migração: colunas de layout/overlays por dispositivo
 function ensureColumn(table, col, def) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   if (!cols.some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
+// legado (v0.3): configuração de clima/rodapé direto no dispositivo
 ensureColumn('devices', 'weather_enabled', 'INTEGER DEFAULT 0');
 ensureColumn('devices', 'weather_location', 'TEXT');
 ensureColumn('devices', 'weather_lat', 'REAL');
 ensureColumn('devices', 'weather_lon', 'REAL');
 ensureColumn('devices', 'ticker_enabled', 'INTEGER DEFAULT 0');
 ensureColumn('devices', 'ticker_text', 'TEXT');
+// v0.4: perfis reutilizáveis + tamanhos ajustáveis
+ensureColumn('devices', 'sidebar_id', 'TEXT REFERENCES sidebars(id) ON DELETE SET NULL');
+ensureColumn('devices', 'sidebar_width', 'INTEGER DEFAULT 22');
+ensureColumn('devices', 'ticker_height', 'INTEGER DEFAULT 12');
+
+// Converte a configuração antiga (por dispositivo) em perfis reutilizáveis.
+// Roda uma única vez: limpa os flags legados ao final de cada conversão.
+const legacy = db.prepare(`SELECT * FROM devices
+  WHERE (weather_enabled = 1 AND weather_lat IS NOT NULL)
+     OR (ticker_enabled = 1 AND ticker_text IS NOT NULL AND ticker_text <> '')`).all();
+for (const d of legacy) {
+  if (d.weather_enabled && d.weather_lat != null) {
+    const sid = crypto.randomUUID();
+    db.prepare(`INSERT INTO sidebars (id, name, city, lat, lon) VALUES (?,?,?,?,?)`)
+      .run(sid, d.weather_location || d.name, d.weather_location, d.weather_lat, d.weather_lon);
+    db.prepare('UPDATE devices SET sidebar_id = ? WHERE id = ?').run(sid, d.id);
+  }
+  if (d.ticker_enabled && d.ticker_text) {
+    const tid = crypto.randomUUID();
+    db.prepare('INSERT INTO tickers (id, name, text) VALUES (?,?,?)')
+      .run(tid, 'Avisos — ' + d.name, d.ticker_text);
+    db.prepare('INSERT OR IGNORE INTO device_tickers (device_id, ticker_id) VALUES (?,?)').run(d.id, tid);
+  }
+  db.prepare('UPDATE devices SET weather_enabled = 0, ticker_enabled = 0 WHERE id = ?').run(d.id);
+}
+if (legacy.length) console.log(`[migração] ${legacy.length} tela(s) convertida(s) para perfis reutilizáveis`);
 
 module.exports = db;

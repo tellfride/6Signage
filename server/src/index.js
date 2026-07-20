@@ -321,22 +321,60 @@ async function getWeather(lat, lon) {
   if (cached && Date.now() - cached.ts < 15 * 60 * 1000) return cached.data;
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
+      `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m` +
+      `&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=auto`;
     const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     const j = await r.json();
     const c = j.current || {};
+    const dly = j.daily || {};
     const data = {
       temp: Math.round(c.temperature_2m),
       code: c.weather_code,
       humidity: c.relative_humidity_2m,
       wind: Math.round(c.wind_speed_10m)
     };
+    // índice 1 = amanhã (forecast_days=2 devolve hoje e amanhã)
+    if (dly.temperature_2m_max && dly.temperature_2m_max.length > 1) {
+      data.tomorrow = {
+        max: Math.round(dly.temperature_2m_max[1]),
+        min: Math.round(dly.temperature_2m_min[1]),
+        code: dly.weather_code ? dly.weather_code[1] : null
+      };
+    }
     weatherCache.set(key, { ts: Date.now(), data });
     return data;
   } catch {
     return cached ? cached.data : null; // em falha de rede, devolve o último conhecido
   }
 }
+
+// Busca por CEP (BrasilAPI; se não vier coordenada, geocodifica a cidade)
+app.get('/api/weather/cep', auth, async (req, res) => {
+  const cep = String(req.query.cep || '').replace(/\D/g, '');
+  if (cep.length !== 8) return res.status(400).json({ error: 'CEP deve ter 8 dígitos' });
+  try {
+    const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return res.status(404).json({ error: 'CEP não encontrado' });
+    const j = await r.json();
+    const coords = j.location && j.location.coordinates;
+    let lat = coords && coords.latitude ? Number(coords.latitude) : null;
+    let lon = coords && coords.longitude ? Number(coords.longitude) : null;
+    if (lat == null || lon == null) { // fallback: geocodifica cidade/UF
+      const g = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=` +
+        `${encodeURIComponent(j.city)}&count=1&language=pt&format=json`, { signal: AbortSignal.timeout(8000) });
+      const gj = await g.json();
+      const hit = (gj.results || [])[0];
+      if (!hit) return res.status(404).json({ error: 'Não foi possível localizar o CEP no mapa' });
+      lat = hit.latitude; lon = hit.longitude;
+    }
+    res.json({
+      city: j.city, region: j.state, neighborhood: j.neighborhood || '',
+      street: j.street || '', postal_code: cep, lat, lon
+    });
+  } catch {
+    res.status(502).json({ error: 'Não foi possível consultar o CEP agora' });
+  }
+});
 
 // Busca de localidade para o editor (autocompletar cidade)
 app.get('/api/weather/search', auth, async (req, res) => {
@@ -355,33 +393,187 @@ app.get('/api/weather/search', auth, async (req, res) => {
   }
 });
 
-// Salvar layout/overlays de uma tela (painel de clima + rodapé de avisos)
+// Telas que o usuário pode alterar (admin: todas; editor: só dos seus grupos)
+function filterAllowedDevices(user, ids) {
+  const allowed = allowedGroups(user);
+  if (!allowed) return ids;
+  if (!allowed.length) return [];
+  const ph = allowed.map(() => '?').join(',');
+  const ok = db.prepare(`SELECT id FROM devices WHERE group_id IN (${ph})`).all(...allowed).map(r => r.id);
+  return ids.filter(id => ok.includes(id));
+}
+function canEditDevice(user, device) {
+  const allowed = allowedGroups(user);
+  return !allowed || (device.group_id && allowed.includes(device.group_id));
+}
+
+// ---------- Faixas de rodapé (avisos) ----------
+app.get('/api/tickers', auth, (req, res) => {
+  const list = db.prepare('SELECT * FROM tickers ORDER BY name').all();
+  for (const t of list)
+    t.device_ids = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?')
+      .all(t.id).map(r => r.device_id);
+  res.json(list);
+});
+
+app.post('/api/tickers', auth, canWrite, (req, res) => {
+  const { name, text } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Dê um nome à faixa' });
+  const id = uuid();
+  db.prepare('INSERT INTO tickers (id, name, text) VALUES (?,?,?)').run(id, name, text || '');
+  res.status(201).json(db.prepare('SELECT * FROM tickers WHERE id = ?').get(id));
+});
+
+app.put('/api/tickers/:id', auth, canWrite, (req, res) => {
+  const t = db.prepare('SELECT id FROM tickers WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Faixa não encontrada' });
+  const { name, text } = req.body || {};
+  db.prepare('UPDATE tickers SET name = COALESCE(?, name), text = COALESCE(?, text) WHERE id = ?')
+    .run(name ?? null, text ?? null, t.id);
+  db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?').all(t.id)
+    .forEach(r => notifyDevice(r.device_id));
+  res.json({ ok: true });
+});
+
+app.delete('/api/tickers/:id', auth, canWrite, (req, res) => {
+  const devs = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?').all(req.params.id);
+  db.prepare('DELETE FROM tickers WHERE id = ?').run(req.params.id);
+  devs.forEach(r => notifyDevice(r.device_id));
+  res.json({ ok: true });
+});
+
+// Atribuir a faixa a telas: uma, várias ou todas (envie a lista de ids)
+app.put('/api/tickers/:id/devices', auth, canWrite, (req, res) => {
+  const t = db.prepare('SELECT id FROM tickers WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Faixa não encontrada' });
+  const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
+  const before = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?').all(t.id).map(r => r.device_id);
+  const editable = filterAllowedDevices(req.user, before);
+  db.exec('BEGIN');
+  try {
+    // remove apenas os vínculos que o usuário pode mexer
+    const del = db.prepare('DELETE FROM device_tickers WHERE ticker_id = ? AND device_id = ?');
+    editable.forEach(id => del.run(t.id, id));
+    const ins = db.prepare('INSERT OR IGNORE INTO device_tickers (device_id, ticker_id) VALUES (?,?)');
+    wanted.forEach(id => ins.run(id, t.id));
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  new Set([...before, ...wanted]).forEach(id => notifyDevice(id));
+  res.json({ ok: true, count: wanted.length });
+});
+
+// ---------- Perfis de barra lateral (clima) ----------
+app.get('/api/sidebars', auth, (req, res) => {
+  const list = db.prepare('SELECT * FROM sidebars ORDER BY name').all();
+  for (const s of list)
+    s.device_ids = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(s.id).map(r => r.id);
+  res.json(list);
+});
+
+app.post('/api/sidebars', auth, canWrite, (req, res) => {
+  const { name, city, postal_code, lat, lon, show_tomorrow } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Dê um nome ao perfil' });
+  if (lat == null || lon == null) return res.status(400).json({ error: 'Escolha a cidade ou informe o CEP' });
+  const id = uuid();
+  db.prepare(`INSERT INTO sidebars (id, name, city, postal_code, lat, lon, show_tomorrow)
+              VALUES (?,?,?,?,?,?,?)`)
+    .run(id, name, city || null, postal_code || null, lat, lon, show_tomorrow === false ? 0 : 1);
+  res.status(201).json(db.prepare('SELECT * FROM sidebars WHERE id = ?').get(id));
+});
+
+app.put('/api/sidebars/:id', auth, canWrite, (req, res) => {
+  const s = db.prepare('SELECT id FROM sidebars WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Perfil não encontrado' });
+  const b = req.body || {};
+  db.prepare(`UPDATE sidebars SET name = COALESCE(?, name), city = COALESCE(?, city),
+      postal_code = COALESCE(?, postal_code), lat = COALESCE(?, lat), lon = COALESCE(?, lon),
+      show_tomorrow = COALESCE(?, show_tomorrow) WHERE id = ?`)
+    .run(b.name ?? null, b.city ?? null, b.postal_code ?? null, b.lat ?? null, b.lon ?? null,
+         b.show_tomorrow === undefined ? null : (b.show_tomorrow ? 1 : 0), s.id);
+  db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(s.id).forEach(r => notifyDevice(r.id));
+  res.json({ ok: true });
+});
+
+app.delete('/api/sidebars/:id', auth, canWrite, (req, res) => {
+  const devs = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(req.params.id);
+  db.prepare('DELETE FROM sidebars WHERE id = ?').run(req.params.id);
+  devs.forEach(r => notifyDevice(r.id));
+  res.json({ ok: true });
+});
+
+// Atribuir o perfil de clima a telas (uma, várias ou todas)
+app.put('/api/sidebars/:id/devices', auth, canWrite, (req, res) => {
+  const s = db.prepare('SELECT id FROM sidebars WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Perfil não encontrado' });
+  const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
+  const before = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(s.id).map(r => r.id);
+  const editable = filterAllowedDevices(req.user, before);
+  db.exec('BEGIN');
+  try {
+    const clear = db.prepare('UPDATE devices SET sidebar_id = NULL WHERE id = ?');
+    editable.forEach(id => clear.run(id));
+    const set = db.prepare('UPDATE devices SET sidebar_id = ? WHERE id = ?');
+    wanted.forEach(id => set.run(s.id, id));
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  new Set([...before, ...wanted]).forEach(id => notifyDevice(id));
+  res.json({ ok: true, count: wanted.length });
+});
+
+// Layout da tela: perfil de clima, faixas de rodapé e tamanhos
 app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
   const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
   if (!d) return res.status(404).json({ error: 'Tela não encontrada' });
-  const allowed = allowedGroups(req.user);
-  if (allowed && (!d.group_id || !allowed.includes(d.group_id)))
+  if (!canEditDevice(req.user, d))
     return res.status(403).json({ error: 'Você não tem permissão para editar esta tela' });
   const b = req.body || {};
-  db.prepare(`UPDATE devices SET
-      weather_enabled = ?, weather_location = ?, weather_lat = ?, weather_lon = ?,
-      ticker_enabled = ?, ticker_text = ? WHERE id = ?`)
-    .run(b.weather_enabled ? 1 : 0, b.weather_location || null,
-         b.weather_lat ?? null, b.weather_lon ?? null,
-         b.ticker_enabled ? 1 : 0, b.ticker_text || null, d.id);
+  const clamp = (v, lo, hi, dflt) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
+  };
+  db.prepare(`UPDATE devices SET sidebar_id = ?, sidebar_width = ?, ticker_height = ? WHERE id = ?`)
+    .run(b.sidebar_id || null,
+         clamp(b.sidebar_width, 10, 45, 22),
+         clamp(b.ticker_height, 6, 30, 12), d.id);
+  if (Array.isArray(b.ticker_ids)) {
+    db.exec('BEGIN');
+    try {
+      db.prepare('DELETE FROM device_tickers WHERE device_id = ?').run(d.id);
+      const ins = db.prepare('INSERT OR IGNORE INTO device_tickers (device_id, ticker_id) VALUES (?,?)');
+      b.ticker_ids.forEach(tid => ins.run(d.id, tid));
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
   notifyDevice(d.id);
   res.json({ ok: true });
 });
 
 async function buildLayout(d) {
   const layout = {
-    weather: { enabled: !!d.weather_enabled, city: d.weather_location || '' },
-    ticker: { enabled: !!d.ticker_enabled, text: d.ticker_text || '' }
+    weather: { enabled: false, width: d.sidebar_width || 22, city: '' },
+    ticker: { enabled: false, height: d.ticker_height || 12, text: '' }
   };
-  if (d.weather_enabled && d.weather_lat != null && d.weather_lon != null) {
-    const w = await getWeather(d.weather_lat, d.weather_lon);
-    if (w) Object.assign(layout.weather, w);
+  if (d.sidebar_id) {
+    const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(d.sidebar_id);
+    if (s) {
+      layout.weather.enabled = true;
+      layout.weather.city = s.city || s.name;
+      layout.weather.show_tomorrow = !!s.show_tomorrow;
+      if (s.lat != null && s.lon != null) {
+        const w = await getWeather(s.lat, s.lon);
+        if (w) {
+          Object.assign(layout.weather, w);
+          if (!s.show_tomorrow) delete layout.weather.tomorrow;
+        }
+      }
+    }
   }
+  // todas as faixas atribuídas a esta tela viram um fluxo único de mensagens
+  const text = db.prepare(`SELECT t.text FROM device_tickers dt
+      JOIN tickers t ON t.id = dt.ticker_id
+      WHERE dt.device_id = ? ORDER BY t.name`).all(d.id)
+    .map(r => (r.text || '').trim()).filter(Boolean).join('\n');
+  if (text) { layout.ticker.enabled = true; layout.ticker.text = text; }
   return layout;
 }
 
