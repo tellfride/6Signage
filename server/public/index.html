@@ -322,6 +322,12 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
   .rail{gap:13px;padding:10px 13px}
 }
 @media(min-width:881px){#tabbar{display:none}}
+
+/* selo de versão — como o firmware estampado num equipamento de estúdio */
+.verfoot{display:flex;align-items:center;gap:8px;margin-top:28px;padding-top:14px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+.verfoot i{width:3px;height:3px;border-radius:50%;background:var(--faint);flex:0 0 auto}
+.verfoot #verTag{text-transform:none;letter-spacing:.02em}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .hidden{display:none!important}
 </style>
@@ -363,6 +369,7 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
       <section id="tab-media" class="hidden"></section>
       <section id="tab-groups" class="hidden"></section>
       <section id="tab-users" class="hidden"></section>
+      <footer class="verfoot"><span>6SIGNAGE</span><i></i><span class="mono" id="verTag">···</span></footer>
     </main>
   </div>
 </div>
@@ -534,6 +541,7 @@ function boot(){
   applyTheme(document.documentElement.dataset.theme);
   tab('devices');
   setInterval(()=>{ if(!$('#tab-devices').classList.contains('hidden')) loadDevices(true) }, 15000);
+  fetch('/api/health').then(r=>r.json()).then(j=>{ $('#verTag').textContent = 'v'+j.version }).catch(()=>{});
 }
 function tab(name){
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
