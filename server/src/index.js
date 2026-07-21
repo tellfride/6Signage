@@ -295,9 +295,11 @@ app.get('/api/devices', auth, (req, res) => {
     d.ticker_count = tk.length;
     d.ticker_preview = tk.join('\n').split('\n').map(s => s.trim()).filter(Boolean).join(' · ');
     if (d.sidebar_lat != null && d.sidebar_lon != null) {
-      // só o que já está em cache — nunca busca durante a listagem
+      // usa só o cache (a listagem nunca espera rede); se frio, aquece em
+      // segundo plano — o próximo refresh do painel (15 s) já mostra
       const c = weatherCache.get(`${d.sidebar_lat.toFixed(3)},${d.sidebar_lon.toFixed(3)}`);
       if (c) d.sidebar_temp = c.data.temp;
+      else getWeather(d.sidebar_lat, d.sidebar_lon).catch(() => {});
     }
   }
   res.json(devices);
