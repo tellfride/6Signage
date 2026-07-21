@@ -114,6 +114,24 @@ CREATE TABLE IF NOT EXISTS sidebars (
   show_tomorrow INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Perfis de LAYOUT (tamanho + aparência) — atrelável a um grupo inteiro ou a uma tela
+CREATE TABLE IF NOT EXISTS layouts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  sidebar_width INTEGER DEFAULT 22,
+  ticker_height INTEGER DEFAULT 12,
+  orientation TEXT DEFAULT 'auto' CHECK (orientation IN ('auto','landscape','portrait')),
+  sidebar_bg_mode TEXT DEFAULT 'auto' CHECK (sidebar_bg_mode IN ('auto','color','image')),
+  sidebar_bg_color TEXT,
+  sidebar_bg_image TEXT,
+  sidebar_bg_checksum TEXT,
+  ticker_bg_mode TEXT DEFAULT 'auto' CHECK (ticker_bg_mode IN ('auto','color','image')),
+  ticker_bg_color TEXT,
+  ticker_bg_image TEXT,
+  ticker_bg_checksum TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // Migração: colunas de layout/overlays por dispositivo
@@ -132,6 +150,9 @@ ensureColumn('devices', 'ticker_text', 'TEXT');
 ensureColumn('devices', 'sidebar_id', 'TEXT REFERENCES sidebars(id) ON DELETE SET NULL');
 ensureColumn('devices', 'sidebar_width', 'INTEGER DEFAULT 22');
 ensureColumn('devices', 'ticker_height', 'INTEGER DEFAULT 12');
+// v1.2: perfil de LAYOUT atrelável a um grupo (default) ou a uma tela (override explícito)
+ensureColumn('devices', 'layout_id', 'TEXT REFERENCES layouts(id) ON DELETE SET NULL');
+ensureColumn('device_groups', 'layout_id', 'TEXT REFERENCES layouts(id) ON DELETE SET NULL');
 
 // Converte a configuração antiga (por dispositivo) em perfis reutilizáveis.
 // Roda uma única vez: limpa os flags legados ao final de cada conversão.

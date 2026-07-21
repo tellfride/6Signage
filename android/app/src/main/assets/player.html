@@ -120,7 +120,7 @@ async function register() {
     body: JSON.stringify({
       device_key: cfg.deviceKey, device_name: cfg.deviceName,
       resolution: `${screen.width}x${screen.height}`,
-      os_version: cfg.osVersion || navigator.platform, client_version: '1.1.0'
+      os_version: cfg.osVersion || navigator.platform, client_version: '1.2.0'
     })
   });
   return r.json();
@@ -143,7 +143,7 @@ async function syncManifest() {
         try { it.localUrl = await window.signage.cacheMedia({ url: it.url, checksum: it.checksum }); }
         catch (e) { console.error(e); it.localUrl = cfg.server + it.url; }
       }
-      try { if (window.signage.pruneCache) window.signage.pruneCache(m.items.map(it => it.checksum).filter(Boolean)); } catch {}
+      try { if (window.signage.pruneCache) window.signage.pruneCache([...m.items.map(it => it.checksum), ...currentBgChecksums].filter(Boolean)); } catch {}
       idx = 0; play();
     }
   } catch (e) {
@@ -193,6 +193,27 @@ function setTicker(msg) {
   track.style.animation = `scroll ${dur}s linear infinite`;
 }
 
+// Fundo cor sólida ou imagem (com véu escuro p/ legibilidade); 'auto' preserva o gradiente do CSS.
+const bgSig = {};
+async function applyBg(elId, mode, color, image, checksum) {
+  const sig = mode + '|' + (color || '') + '|' + (image || '');
+  if (bgSig[elId] === sig) return;
+  bgSig[elId] = sig;
+  const el = $(elId);
+  if (mode === 'color' && color) {
+    el.style.backgroundColor = color; el.style.backgroundImage = 'none';
+  } else if (mode === 'image' && image) {
+    let url = cfg.server + image;
+    try { url = await window.signage.cacheMedia({ url: image, checksum }); } catch (e) { console.error('fundo:', e); }
+    el.style.backgroundColor = 'transparent';
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.55)), url("${url}")`;
+    el.style.backgroundSize = 'cover'; el.style.backgroundPosition = 'center';
+  } else {
+    el.style.backgroundColor = ''; el.style.backgroundImage = '';
+  }
+}
+let currentBgChecksums = [];
+
 function renderLayout(L) {
   L = L || {};
   const wx = L.weather || {}, tk = L.ticker || {};
@@ -203,6 +224,9 @@ function renderLayout(L) {
   document.body.classList.toggle('has-ticker', tickerOn);
   document.documentElement.style.setProperty('--wx-w', (wx.width || 22) + '%');
   document.documentElement.style.setProperty('--tk-h', (tk.height || 12) + '%');
+  currentBgChecksums = [wx.bgMode === 'image' && wx.bgChecksum, tk.bgMode === 'image' && tk.bgChecksum].filter(Boolean);
+  applyBg('wx', wx.bgMode, wx.bgColor, wx.bgImage, wx.bgChecksum);
+  applyBg('ticker', tk.bgMode, tk.bgColor, tk.bgImage, tk.bgChecksum);
 
   if (wx.enabled) {
     const [icon, text] = wmo(wx.code);

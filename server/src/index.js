@@ -13,12 +13,55 @@ const db = require('./db');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'troque-este-segredo-em-producao';
 const MEDIA_DIR = path.join(__dirname, '..', 'media');
+const BG_DIR = path.join(__dirname, '..', 'backgrounds');
+fs.mkdirSync(BG_DIR, { recursive: true });
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/media', express.static(MEDIA_DIR));
+app.use('/backgrounds', express.static(BG_DIR));
 app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
+
+function clamp(v, lo, hi, dflt) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
+}
+
+// Perfil de layout que efetivamente comanda a aparência da tela:
+// override na própria tela > padrão do grupo > nenhum (cai nas colunas legadas).
+function pickLayout(d) {
+  if (d.layout_id) {
+    const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(d.layout_id);
+    if (L) return L;
+  }
+  if (d.group_id) {
+    const g = db.prepare('SELECT layout_id FROM device_groups WHERE id = ?').get(d.group_id);
+    if (g && g.layout_id) {
+      const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(g.layout_id);
+      if (L) return L;
+    }
+  }
+  return null;
+}
+// Sem perfil explícito, infere pela resolução reportada pelo próprio player
+// (ex.: "1080x1920" → retrato) — cobre o parque de telas sem exigir configuração.
+function inferOrientation(resolution) {
+  const m = /^(\d+)\s*[xX]\s*(\d+)$/.exec(resolution || '');
+  if (!m) return 'landscape';
+  return Number(m[2]) > Number(m[1]) ? 'portrait' : 'landscape';
+}
+function resolveOrientation(layout, resolution) {
+  if (layout && layout.orientation && layout.orientation !== 'auto') return layout.orientation;
+  return inferOrientation(resolution);
+}
+// Notifica as telas afetadas por uma mudança no perfil: as com override direto
+// e as que herdam por estarem num grupo que usa este perfil como padrão.
+function notifyLayoutDevices(layoutId) {
+  db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(layoutId).forEach(r => notifyDevice(r.id));
+  db.prepare(`SELECT d.id FROM devices d JOIN device_groups g ON g.id = d.group_id
+              WHERE g.layout_id = ? AND d.layout_id IS NULL`).all(layoutId).forEach(r => notifyDevice(r.id));
+}
 
 app.get('/api/health', (req, res) =>
   res.json({ app: '6signage', version: require('../package.json').version }));
@@ -301,6 +344,19 @@ app.get('/api/devices', auth, (req, res) => {
       if (c) d.sidebar_temp = c.data.temp;
       else getWeather(d.sidebar_lat, d.sidebar_lon).catch(() => {});
     }
+    // Layout efetivo (para o espelho no console): próprio > herdado do grupo > legado
+    const L = pickLayout(d);
+    d.layout_name = L ? L.name : null;
+    d.layout_inherited = !d.layout_id && !!L; // veio do grupo, não da própria tela
+    d.eff_sidebar_width = L ? L.sidebar_width : (d.sidebar_width || 22);
+    d.eff_ticker_height = L ? L.ticker_height : (d.ticker_height || 12);
+    d.eff_sidebar_bg_mode = L ? L.sidebar_bg_mode : 'auto';
+    d.eff_sidebar_bg_color = L ? L.sidebar_bg_color : null;
+    d.eff_sidebar_bg_image = L ? L.sidebar_bg_image : null;
+    d.eff_ticker_bg_mode = L ? L.ticker_bg_mode : 'auto';
+    d.eff_ticker_bg_color = L ? L.ticker_bg_color : null;
+    d.eff_ticker_bg_image = L ? L.ticker_bg_image : null;
+    d.orientation = resolveOrientation(L, d.resolution);
   }
   res.json(devices);
 });
@@ -560,21 +616,17 @@ app.put('/api/sidebars/:id/devices', auth, canWrite, (req, res) => {
   res.json({ ok: true, count: wanted.length });
 });
 
-// Layout da tela: perfil de clima, faixas de rodapé e tamanhos
+// Layout da tela: perfil de clima, faixas de rodapé, perfil de LAYOUT (ou tamanhos avulsos)
 app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
   const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
   if (!d) return res.status(404).json({ error: 'Tela não encontrada' });
   if (!canEditDevice(req.user, d))
     return res.status(403).json({ error: 'Você não tem permissão para editar esta tela' });
   const b = req.body || {};
-  const clamp = (v, lo, hi, dflt) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
-  };
-  db.prepare(`UPDATE devices SET sidebar_id = ?, sidebar_width = ?, ticker_height = ? WHERE id = ?`)
-    .run(b.sidebar_id || null,
-         clamp(b.sidebar_width, 10, 45, 22),
-         clamp(b.ticker_height, 6, 30, 12), d.id);
+  db.prepare(`UPDATE devices SET sidebar_id = ?, layout_id = ?, sidebar_width = ?, ticker_height = ? WHERE id = ?`)
+    .run(b.sidebar_id || null, b.layout_id || null,
+         clamp(b.sidebar_width, 10, 45, d.sidebar_width || 22),
+         clamp(b.ticker_height, 6, 30, d.ticker_height || 12), d.id);
   if (Array.isArray(b.ticker_ids)) {
     db.exec('BEGIN');
     try {
@@ -588,10 +640,143 @@ app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Perfis de LAYOUT (tamanho + fundo) ----------
+app.get('/api/layouts', auth, (req, res) => {
+  const list = db.prepare('SELECT * FROM layouts ORDER BY name').all();
+  for (const L of list) {
+    L.device_ids = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(L.id).map(r => r.id);
+    L.group_ids = db.prepare('SELECT id FROM device_groups WHERE layout_id = ?').all(L.id).map(r => r.id);
+  }
+  res.json(list);
+});
+
+app.post('/api/layouts', auth, canWrite, (req, res) => {
+  const { name, sidebar_width, ticker_height, orientation } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Dê um nome ao perfil de layout' });
+  const id = uuid();
+  db.prepare(`INSERT INTO layouts (id, name, sidebar_width, ticker_height, orientation) VALUES (?,?,?,?,?)`)
+    .run(id, name, clamp(sidebar_width, 10, 45, 22), clamp(ticker_height, 6, 30, 12),
+         ['auto', 'landscape', 'portrait'].includes(orientation) ? orientation : 'auto');
+  res.status(201).json(db.prepare('SELECT * FROM layouts WHERE id = ?').get(id));
+});
+
+app.put('/api/layouts/:id', auth, canWrite, (req, res) => {
+  const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  const b = req.body || {};
+  const sideMode = ['auto', 'color', 'image'].includes(b.sidebar_bg_mode) ? b.sidebar_bg_mode : L.sidebar_bg_mode;
+  const tickMode = ['auto', 'color', 'image'].includes(b.ticker_bg_mode) ? b.ticker_bg_mode : L.ticker_bg_mode;
+  db.prepare(`UPDATE layouts SET
+      name = ?, sidebar_width = ?, ticker_height = ?, orientation = ?,
+      sidebar_bg_mode = ?, sidebar_bg_color = ?,
+      ticker_bg_mode = ?, ticker_bg_color = ?
+      WHERE id = ?`)
+    .run(
+      b.name && b.name.trim() ? b.name.trim() : L.name,
+      clamp(b.sidebar_width, 10, 45, L.sidebar_width),
+      clamp(b.ticker_height, 6, 30, L.ticker_height),
+      ['auto', 'landscape', 'portrait'].includes(b.orientation) ? b.orientation : L.orientation,
+      sideMode, sideMode === 'color' ? (b.sidebar_bg_color || L.sidebar_bg_color) : (sideMode === 'auto' ? null : L.sidebar_bg_color),
+      tickMode, tickMode === 'color' ? (b.ticker_bg_color || L.ticker_bg_color) : (tickMode === 'auto' ? null : L.ticker_bg_color),
+      L.id);
+  notifyLayoutDevices(L.id);
+  res.json(db.prepare('SELECT * FROM layouts WHERE id = ?').get(L.id));
+});
+
+app.delete('/api/layouts/:id', auth, canWrite, (req, res) => {
+  const devs = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(req.params.id);
+  const inherited = db.prepare(`SELECT d.id FROM devices d JOIN device_groups g ON g.id = d.group_id
+                                 WHERE g.layout_id = ?`).all(req.params.id);
+  db.prepare('DELETE FROM layouts WHERE id = ?').run(req.params.id);
+  [...devs, ...inherited].forEach(r => notifyDevice(r.id));
+  res.json({ ok: true });
+});
+
+// Envio do fundo (JPG/PNG/WEBP) para a barra lateral ou o rodapé deste perfil
+const bgUpload = multer({
+  storage: multer.diskStorage({
+    destination: BG_DIR,
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^\w.\-]/g, '_')}`)
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB — imagem de fundo, não vídeo
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(jpg|jpeg|png|webp)$/i.test(file.originalname);
+    cb(ok ? null : new Error('Use JPG, PNG ou WEBP'), ok);
+  }
+});
+
+app.post('/api/layouts/:id/background', auth, canWrite, bgUpload.single('file'), async (req, res) => {
+  const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
+  const side = req.body.side === 'ticker' ? 'ticker' : 'sidebar';
+  const checksum = await fileSha256(req.file.path);
+  const url = `/backgrounds/${req.file.filename}`;
+  db.prepare(`UPDATE layouts SET ${side}_bg_mode = 'image', ${side}_bg_image = ?,
+              ${side}_bg_checksum = ?, ${side}_bg_color = NULL WHERE id = ?`)
+    .run(url, checksum, L.id);
+  notifyLayoutDevices(L.id);
+  res.json(db.prepare('SELECT * FROM layouts WHERE id = ?').get(L.id));
+});
+
+// Atribuir o perfil de layout a telas específicas (override direto — vence o do grupo)
+app.put('/api/layouts/:id/devices', auth, canWrite, (req, res) => {
+  const L = db.prepare('SELECT id FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
+  const before = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(L.id).map(r => r.id);
+  const editable = filterAllowedDevices(req.user, before);
+  db.exec('BEGIN');
+  try {
+    const clear = db.prepare('UPDATE devices SET layout_id = NULL WHERE id = ?');
+    editable.forEach(id => clear.run(id));
+    const set = db.prepare('UPDATE devices SET layout_id = ? WHERE id = ?');
+    wanted.forEach(id => set.run(L.id, id));
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  new Set([...before, ...wanted]).forEach(id => notifyDevice(id));
+  res.json({ ok: true, count: wanted.length });
+});
+
+// Atribuir o perfil de layout como padrão de um ou vários GRUPOS inteiros
+app.put('/api/layouts/:id/groups', auth, adminOnly, (req, res) => {
+  const L = db.prepare('SELECT id FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  const allIds = new Set(db.prepare('SELECT id FROM device_groups').all().map(r => r.id));
+  const wanted = (req.body.group_ids || []).filter(id => allIds.has(id));
+  const before = db.prepare('SELECT id FROM device_groups WHERE layout_id = ?').all(L.id).map(r => r.id);
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE device_groups SET layout_id = NULL WHERE layout_id = ?').run(L.id);
+    const set = db.prepare('UPDATE device_groups SET layout_id = ? WHERE id = ?');
+    wanted.forEach(id => set.run(L.id, id));
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  const affected = new Set([...before, ...wanted]);
+  if (affected.size) {
+    const ph = [...affected].map(() => '?').join(',');
+    db.prepare(`SELECT id FROM devices WHERE group_id IN (${ph}) AND layout_id IS NULL`)
+      .all(...affected).forEach(r => notifyDevice(r.id));
+  }
+  res.json({ ok: true, count: wanted.length });
+});
+
 async function buildLayout(d) {
+  const L = pickLayout(d);
+  const sidebarWidth = L ? L.sidebar_width : (d.sidebar_width || 22);
+  const tickerHeight = L ? L.ticker_height : (d.ticker_height || 12);
   const layout = {
-    weather: { enabled: false, width: d.sidebar_width || 22, city: '' },
-    ticker: { enabled: false, height: d.ticker_height || 12, text: '' }
+    orientation: resolveOrientation(L, d.resolution),
+    weather: {
+      enabled: false, width: sidebarWidth, city: '',
+      bgMode: L ? L.sidebar_bg_mode : 'auto', bgColor: (L && L.sidebar_bg_color) || null,
+      bgImage: (L && L.sidebar_bg_image) || null, bgChecksum: (L && L.sidebar_bg_checksum) || null
+    },
+    ticker: {
+      enabled: false, height: tickerHeight, text: '',
+      bgMode: L ? L.ticker_bg_mode : 'auto', bgColor: (L && L.ticker_bg_color) || null,
+      bgImage: (L && L.ticker_bg_image) || null, bgChecksum: (L && L.ticker_bg_checksum) || null
+    }
   };
   if (d.sidebar_id) {
     const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(d.sidebar_id);

@@ -33,14 +33,17 @@ com painel de controle web responsivo (desktop e celular).
 - Download dos agentes (Windows/Android) direto do painel
 - Login JWT
 
-**Playlists em três tipos** (aba Playlists)
+**Playlists em quatro tipos** (aba Playlists)
 - **Mídia**: sequência de vídeos e imagens
 - **Rodapé**: faixas de avisos reutilizáveis — aplique em uma tela, em várias ou em
   todas; uma tela pode exibir **várias faixas** ao mesmo tempo (as mensagens se juntam
   num fluxo único)
 - **Barra lateral**: perfis de clima reutilizáveis — um perfil serve várias telas
+- **Layout**: perfis de tamanho + fundo (largura da coluna, altura do rodapé, cor ou
+  imagem de fundo), **atrelável a um grupo inteiro ou a uma tela específica** — o
+  override de uma tela sempre vence o padrão herdado do grupo
 
-**Overlays na tela (opcionais, por tela)**
+**Overlays na tela (opcionais, por tela ou por grupo)**
 - **Barra lateral de clima**: relógio, data, temperatura atual e **previsão de amanhã**
   (máx/mín). Localidade por **cidade ou CEP** (via [BrasilAPI](https://brasilapi.com.br),
   mais preciso); dados meteorológicos da [Open-Meteo](https://open-meteo.com) — ambas
@@ -48,6 +51,13 @@ com painel de controle web responsivo (desktop e celular).
 - **Rodapé de avisos**: mensagens rolando em fluxo contínuo, da borda direita até a esquerda
 - **Tamanhos ajustáveis**: largura da coluna lateral (10–45%) e altura do rodapé (6–30%),
   com pré-visualização ao vivo — a tipografia escala junto
+- **Fundo personalizável**: automático (gradiente padrão), cor sólida ou imagem (JPG/PNG/WEBP)
+  para a barra lateral e para o rodapé, cada um independente
+- **Orientação paisagem/retrato**: detectada automaticamente pela resolução que a
+  própria tela reporta (ex.: 1080x1920 → retrato), com opção de forçar manualmente no
+  perfil de layout. O console mostra o espelho de cada tela na proporção real —
+  telas em retrato aparecem estreitas e altas no video wall, facilitando a visualização
+  num parque com tamanhos variados (18" a 70", paisagem ou retrato)
 
 **Players (Windows e Android TV)**
 - Assistente de configuração na primeira execução: endereço do servidor + nome da tela,
@@ -185,7 +195,8 @@ instalação nova e auto-update).
 | Playlists | CRUD + `PUT /api/playlists/:id/items` + `POST /api/playlists/:id/assign` |
 | Rodapé | CRUD `/api/tickers` + `PUT /api/tickers/:id/devices` |
 | Barra lateral | CRUD `/api/sidebars` + `PUT /api/sidebars/:id/devices` |
-| Layout | `PUT /api/devices/:id/layout` (perfil, faixas, larguras) |
+| Layout (por tela) | `PUT /api/devices/:id/layout` (perfil, faixas, larguras) |
+| Layout (perfis) | CRUD `/api/layouts` + `PUT /api/layouts/:id/devices` + `PUT /api/layouts/:id/groups` + `POST /api/layouts/:id/background` |
 | Clima | `GET /api/weather/search?q=`, `GET /api/weather/cep?cep=` |
 | Mídia | `GET /api/media`, `POST /api/media/upload`, `DELETE /api/media/:id` |
 | Grupos | CRUD `/api/groups` |

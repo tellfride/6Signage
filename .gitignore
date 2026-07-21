@@ -5,6 +5,7 @@ node_modules/
 server/6signage.db*
 server/media/*
 !server/media/.gitkeep
+server/backgrounds/*
 
 # Artefatos de build (anexar nas Releases do GitHub, não no repositório)
 server/downloads/
