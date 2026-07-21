@@ -1,6 +1,6 @@
 {
   "name": "6signage-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "6Signage - Servidor central de Digital Signage (MVP Fase 1)",
   "main": "src/index.js",
   "scripts": {
