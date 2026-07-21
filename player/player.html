@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <style>
-:root{--wx-bg1:#0B2A6B;--wx-bg2:#123A8C;--accent:#5B8CFF;--wx-w:22%;--tk-h:12%}
+:root{--wx-bg1:#0B2A6B;--wx-bg2:#123A8C;--accent:#4C8DFF;--wx-w:22%;--tk-h:12%}
 html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;cursor:none;
   font-family:system-ui,'Segoe UI',sans-serif;color:#fff}
 
@@ -102,7 +102,7 @@ async function register() {
     body: JSON.stringify({
       device_key: cfg.deviceKey, device_name: cfg.deviceName,
       resolution: `${screen.width}x${screen.height}`,
-      os_version: cfg.osVersion || navigator.platform, client_version: '0.4.0'
+      os_version: cfg.osVersion || navigator.platform, client_version: '1.1.0'
     })
   });
   return r.json();
@@ -125,6 +125,7 @@ async function syncManifest() {
         try { it.localUrl = await window.signage.cacheMedia({ url: it.url, checksum: it.checksum }); }
         catch (e) { console.error(e); it.localUrl = cfg.server + it.url; }
       }
+      try { if (window.signage.pruneCache) window.signage.pruneCache(m.items.map(it => it.checksum).filter(Boolean)); } catch {}
       idx = 0; play();
     }
   } catch (e) {

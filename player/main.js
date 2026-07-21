@@ -74,6 +74,18 @@ const CACHE_DIR = () => {
 
 ipcMain.handle('check-update', () => { checkUpdate(); });
 
+// Remove do cache o que saiu da playlist — sem isso o disco enche com o tempo
+ipcMain.handle('prune-cache', (ev, keep) => {
+  try {
+    const dir = CACHE_DIR();
+    const set = new Set(keep || []);
+    for (const f of fs.readdirSync(dir)) {
+      const base = f.replace(/\.[^.]*$/, '');
+      if (!set.has(base)) fs.unlinkSync(path.join(dir, f));
+    }
+  } catch (e) { console.error('prune-cache:', e.message); }
+});
+
 ipcMain.handle('cache-media', async (ev, { url, checksum }) => {
   const dest = path.join(CACHE_DIR(), checksum + path.extname(url));
   if (fs.existsSync(dest)) return 'file://' + dest;
@@ -109,6 +121,7 @@ async function checkUpdate() {
     console.log(`Atualização disponível: ${app.getVersion()} -> ${info.version}`);
     await applyUpdate(info);
   } catch (e) {
+    updating = false; // libera nova tentativa no próximo ciclo
     console.error('Falha ao verificar atualização:', e.message);
   }
 }

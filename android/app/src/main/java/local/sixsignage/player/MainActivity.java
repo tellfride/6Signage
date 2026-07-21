@@ -103,6 +103,9 @@ public class MainActivity extends Activity {
                     int n;
                     while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                 }
+                // valida a integridade antes de entregar ao instalador do sistema
+                String want = o.optString("sha256", "");
+                if (!want.isEmpty() && !sha256(apk).equalsIgnoreCase(want)) { apk.delete(); return; }
                 runOnUiThread(() -> installApk(apk));
             } catch (Exception e) { /* silencioso: tenta de novo no próximo ciclo */ }
         }).start();
@@ -202,6 +205,24 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void checkUpdate() { MainActivity.this.checkUpdate(); }
+
+        /** Remove do cache o que saiu da playlist (keepJson = array JSON de checksums). */
+        @JavascriptInterface
+        public void pruneCache(String keepJson) {
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(keepJson);
+                java.util.HashSet<String> keep = new java.util.HashSet<>();
+                for (int i = 0; i < a.length(); i++) keep.add(a.getString(i));
+                File[] files = new File(getFilesDir(), "media_cache").listFiles();
+                if (files == null) return;
+                for (File f : files) {
+                    String n = f.getName();
+                    int dot = n.lastIndexOf('.');
+                    String base = dot > 0 ? n.substring(0, dot) : n;
+                    if (n.endsWith(".part") || !keep.contains(base)) f.delete();
+                }
+            } catch (Exception ignored) { }
+        }
 
         @JavascriptInterface
         public String getConfig() {

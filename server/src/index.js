@@ -158,10 +158,19 @@ app.get('/api/media', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM media ORDER BY uploaded_at DESC').all());
 });
 
-app.post('/api/media/upload', auth, canWrite, upload.single('file'), (req, res) => {
+// SHA-256 em streaming: um vídeo de 1 GB não pode passar pela memória inteiro
+function fileSha256(p) {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256');
+    fs.createReadStream(p).on('data', d => h.update(d))
+      .on('end', () => resolve(h.digest('hex'))).on('error', reject);
+  });
+}
+
+app.post('/api/media/upload', auth, canWrite, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
   const isVideo = /\.(mp4|mkv|webm)$/i.test(req.file.filename);
-  const checksum = crypto.createHash('sha256').update(fs.readFileSync(req.file.path)).digest('hex');
+  const checksum = await fileSha256(req.file.path);
   const id = uuid();
   db.prepare(`INSERT INTO media (id, filename, file_path, file_type, duration_seconds, file_size, checksum)
               VALUES (?,?,?,?,?,?,?)`)
@@ -295,13 +304,17 @@ app.get('/api/devices', auth, (req, res) => {
 });
 
 app.put('/api/devices/:id', auth, canWrite, (req, res) => {
-  const { name, location, group_id, approved } = req.body || {};
-  db.prepare(`UPDATE devices SET
-      name = COALESCE(?, name), location = COALESCE(?, location),
-      group_id = COALESCE(?, group_id), approved = COALESCE(?, approved)
-      WHERE id = ?`)
-    .run(name ?? null, location ?? null, group_id ?? null,
-         approved === undefined ? null : (approved ? 1 : 0), req.params.id);
+  const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'Tela não encontrada' });
+  // Campo presente no body é autoritativo (null/'' limpa) — COALESCE impediria
+  // remover uma tela de um grupo ou apagar o local.
+  const b = req.body || {};
+  const sets = [], vals = [];
+  if ('name' in b && (b.name || '').trim()) { sets.push('name = ?'); vals.push(b.name.trim()); }
+  if ('location' in b) { sets.push('location = ?'); vals.push((b.location || '').trim() || null); }
+  if ('group_id' in b) { sets.push('group_id = ?'); vals.push(b.group_id || null); }
+  if ('approved' in b) { sets.push('approved = ?'); vals.push(b.approved ? 1 : 0); }
+  if (sets.length) db.prepare(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`).run(...vals, d.id);
   res.json(db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id));
 });
 
@@ -416,6 +429,10 @@ app.get('/api/weather/search', auth, async (req, res) => {
 
 // Telas que o usuário pode alterar (admin: todas; editor: só dos seus grupos)
 function filterAllowedDevices(user, ids) {
+  // descarta ids inexistentes (evita violação de FK) e, para editores,
+  // restringe aos grupos permitidos
+  const existing = new Set(db.prepare('SELECT id FROM devices').all().map(r => r.id));
+  ids = ids.filter(id => existing.has(id));
   const allowed = allowedGroups(user);
   if (!allowed) return ids;
   if (!allowed.length) return [];

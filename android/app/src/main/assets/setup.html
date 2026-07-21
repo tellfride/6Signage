@@ -2,48 +2,50 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>6Signage — Configuração</title>
+<title>6Signage — Configurar esta tela</title>
 <style>
 :root{
-  --bg:#0B0E14; --panel:#121826; --line:#232D42; --text:#E8ECF4;
-  --mut:#8A93A8; --acc:#5B8CFF; --ok:#3DDC97; --err:#FF6B6B;
-  --mono:ui-monospace,'Cascadia Mono','Consolas',monospace;
+  --ink:#0A0D12; --panel:#12171F; --well:#0E131A; --line:#212936;
+  --text:#E6EAF0; --muted:#8B95A6; --faint:#59637A;
+  --live:#2FD07E; --dead:#FF5D5D; --act:#4C8DFF; --act-bg:rgba(76,141,255,.14);
+  --mono:ui-monospace,'Cascadia Mono',Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;
-  min-height:100vh;display:flex;flex-direction:column;padding:32px 36px;user-select:none}
-.mark{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-.tv{width:38px;height:28px;border:2px solid var(--acc);border-radius:5px;position:relative}
-.tv::after{content:'';position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
-  width:16px;height:2px;background:var(--acc);border-radius:2px}
-.tv i{position:absolute;right:3px;bottom:3px;width:5px;height:5px;border-radius:50%;background:var(--ok);
-  box-shadow:0 0 6px var(--ok)}
-h1{font-size:20px;letter-spacing:.5px}
-.sub{font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;
-  letter-spacing:2px;margin-bottom:30px}
-label{display:block;font-family:var(--mono);font-size:11px;color:var(--mut);
-  text-transform:uppercase;letter-spacing:1.5px;margin:0 0 7px 2px}
+body{background:var(--ink);color:var(--text);font-family:system-ui,'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;padding:30px 34px;user-select:none;font-size:14.5px}
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(480px 240px at 50% 0%, var(--act-bg), transparent 70%),
+             repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.008) 3px 4px)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:18px;letter-spacing:-.01em;margin-bottom:5px}
+.logo{width:28px;height:22px;border:2px solid var(--text);border-radius:4px;position:relative;flex:0 0 auto}
+.logo::after{content:'';position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:11px;height:2px;background:var(--text)}
+.logo i{position:absolute;right:3px;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--live);box-shadow:0 0 5px var(--live)}
+.lbl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--faint)}
+.sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:28px}
+label{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  text-transform:uppercase;letter-spacing:.16em;margin:0 0 7px 2px}
 input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
-  padding:13px 14px;border-radius:9px;font-size:15px;margin-bottom:20px;outline:none;
-  font-family:var(--mono)}
-input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(91,140,255,.15)}
-.hint{font-size:12px;color:var(--mut);margin:-14px 2px 20px}
+  padding:13px 14px;border-radius:9px;font-size:15px;margin-bottom:18px;outline:none;font-family:var(--mono)}
+input:focus{border-color:var(--act);box-shadow:0 0 0 3px var(--act-bg)}
+.hint{font-size:12px;color:var(--muted);margin:-12px 2px 18px}
 button{width:100%;padding:14px;border:0;border-radius:9px;font-size:15px;font-weight:600;
-  cursor:pointer;margin-bottom:10px}
-button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-.primary{background:var(--acc);color:#fff}
-.primary:disabled{opacity:.45;cursor:default}
-.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
+  cursor:pointer;margin-bottom:10px;font-family:inherit}
+button:focus-visible{outline:2px solid var(--act);outline-offset:2px}
+.primary{background:var(--act);color:#fff}
+.primary:hover{filter:brightness(1.08)}
+.primary:disabled{opacity:.45;cursor:default;filter:none}
+.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.ghost:hover{color:var(--text);border-color:var(--faint)}
 #result{font-family:var(--mono);font-size:12.5px;min-height:36px;padding:9px 2px}
-#result.ok{color:var(--ok)} #result.err{color:var(--err)}
-footer{margin-top:auto;font-family:var(--mono);font-size:10.5px;color:#4A5468;
-  text-transform:uppercase;letter-spacing:1px;line-height:1.9}
-kbd{border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--mut)}
+#result.ok{color:var(--live)} #result.err{color:var(--dead)}
+footer{margin-top:auto;font-family:var(--mono);font-size:10px;color:var(--faint);
+  text-transform:uppercase;letter-spacing:.12em;line-height:2}
+kbd{border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--muted)}
 </style>
 </head>
 <body>
-  <div class="mark"><div class="tv"><i></i></div><h1>6Signage Player</h1></div>
-  <div class="sub">Configuração desta tela</div>
+  <div class="brand"><span class="logo"><i></i></span>6Signage Player</div>
+  <div class="sub">Configurar esta tela</div>
 
   <label for="server">Endereço do servidor</label>
   <input id="server" placeholder="http://10.30.200.200:3000" spellcheck="false">
@@ -51,7 +53,7 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--m
 
   <label for="name">Nome desta tela</label>
   <input id="name" placeholder="TV_Recepcao" spellcheck="false">
-  <div class="hint">Como esta TV aparecerá no painel de controle.</div>
+  <div class="hint">Como esta TV aparece no console.</div>
 
   <div id="result"></div>
 
@@ -69,6 +71,7 @@ window.signage = {
   testServer: (url) => Promise.resolve(JSON.parse(NativeBridge.testServer(url))),
   saveConfig: (cfg) => NativeBridge.saveConfig(cfg.server, cfg.device_name),
   checkUpdate: () => NativeBridge.checkUpdate(),
+  pruneCache: (keep) => NativeBridge.pruneCache(JSON.stringify(keep || [])),
   cacheMedia: ({url, checksum}) => new Promise((res, rej) => {
     const id = ++window.__seq; window.__pending[id] = {res, rej};
     NativeBridge.cacheMedia(id, url, checksum || '');

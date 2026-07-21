@@ -4,5 +4,6 @@ contextBridge.exposeInMainWorld('signage', {
   cacheMedia: (item) => ipcRenderer.invoke('cache-media', item),
   testServer: (url) => ipcRenderer.invoke('test-server', url),
   saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),
-  checkUpdate: () => ipcRenderer.invoke('check-update')
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
+  pruneCache: (keep) => ipcRenderer.invoke('prune-cache', keep)
 });

@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0D12" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F1F4F8" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='26' height='17' rx='3' fill='none' stroke='%234C8DFF' stroke-width='2.5'/%3E%3Cpath d='M11 27h10' stroke='%234C8DFF' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='18' r='2.5' fill='%232FD07E'/%3E%3C/svg%3E">
 <title>6Signage — Console</title>
 <style>
 /* ============================================================
@@ -32,6 +35,10 @@ html[data-theme="light"]{
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:2px solid var(--ink)}
+::-webkit-scrollbar-thumb:hover{background:var(--faint)}
 body{font-family:var(--sans);background:var(--ink);color:var(--text);min-height:100vh;
   font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
@@ -53,6 +60,11 @@ h3{font-size:15.5px;font-weight:650}
 
 /* ---- login ---- */
 #login{max-width:368px;margin:0 auto;padding:16vh 20px 0;display:flex;flex-direction:column;gap:12px}
+#login::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(640px 300px at 50% 10%, var(--act-bg), transparent 70%),
+             repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.008) 3px 4px)}
+html[data-theme="light"] #login::before{
+  background:radial-gradient(640px 300px at 50% 10%, var(--act-bg), transparent 70%)}
 #login .brand{justify-content:center;font-size:19px;margin-bottom:2px}
 #login .lbl{text-align:center;margin-bottom:22px}
 #login input{background:var(--panel);border:1px solid var(--line);padding:12px 14px;border-radius:var(--r);width:100%}
@@ -123,7 +135,10 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
 /* ============ ASSINATURA: espelho fiel da tela ============ */
 .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:15px}
 .sc{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  overflow:hidden;box-shadow:var(--shadow);animation:rise .34s cubic-bezier(.2,.7,.3,1) backwards}
+  overflow:hidden;box-shadow:var(--shadow);animation:rise .34s cubic-bezier(.2,.7,.3,1) backwards;
+  transition:transform .18s,border-color .18s,box-shadow .18s}
+.sc:hover{transform:translateY(-2px);border-color:var(--faint);
+  box-shadow:0 2px 4px rgba(0,0,0,.4),0 18px 38px -18px rgba(0,0,0,.85)}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}}
 .sc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--faint);z-index:3}
 .sc.live::before{background:var(--live);box-shadow:0 0 14px -1px var(--live)}
@@ -398,6 +413,14 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
         <div class="sub" style="margin-top:8px">A playlist de mídia ocupa a área central.</div>
       </div>
       <div>
+        <div class="fld">
+          <div class="t">Identificação</div>
+          <div class="d">Nome e local desta tela no console.</div>
+          <div class="b row">
+            <input id="lmDevName" class="grow" placeholder="Nome da tela" aria-label="Nome da tela">
+            <input id="lmDevLoc" class="grow" placeholder="Local (ex.: Recepção)" aria-label="Local da tela">
+          </div>
+        </div>
         <div class="fld">
           <div class="t">Barra lateral</div>
           <div class="d">Perfil de clima exibido na lateral desta tela.</div>
@@ -1045,6 +1068,8 @@ async function openLayout(id){
     ? tks.map(t=>`<label class="ck"><input type="checkbox" class="lmtk" value="${t.id}"
         ${t.device_ids.includes(lmDev.id)?'checked':''} onchange="lmPreview()">${esc(t.name)}</label>`).join('')
     : '<span class="sub">Nenhuma faixa criada. Crie em Playlists → Rodapé.</span>';
+  $('#lmDevName').value=lmDev.name||'';
+  $('#lmDevLoc').value=lmDev.location||'';
   $('#lmWidth').value=lmDev.sidebar_width||22;
   $('#lmHeight').value=lmDev.ticker_height||12;
   lmPreview();
@@ -1069,12 +1094,20 @@ function lmPreview(){
   $('#lmPvDay').textContent = String(new Date().getDate()).padStart(2,'0');
 }
 function saveLayout(){
-  api('/devices/'+lmDev.id+'/layout',{method:'PUT',body:{
+  const calls=[api('/devices/'+lmDev.id+'/layout',{method:'PUT',body:{
     sidebar_id: $('#lmSidebar').value||null,
     sidebar_width: Number($('#lmWidth').value),
     ticker_height: Number($('#lmHeight').value),
     ticker_ids: [...document.querySelectorAll('.lmtk:checked')].map(c=>c.value)
-  }}).then(()=>{ toast('Layout aplicado — a tela atualiza em instantes','ok'); closeLayout(); loadDevices(true) })
+  }})];
+  const name=$('#lmDevName').value.trim(), loc=$('#lmDevLoc').value.trim();
+  const idPatch={};
+  if(name && name!==lmDev.name) idPatch.name=name;
+  if(loc!==(lmDev.location||'')) idPatch.location=loc;
+  if(Object.keys(idPatch).length)
+    calls.push(api('/devices/'+lmDev.id,{method:'PUT',body:idPatch}));
+  Promise.all(calls)
+    .then(()=>{ toast('Layout aplicado — a tela atualiza em instantes','ok'); closeLayout(); loadDevices(true) })
     .catch(e=>toast(e.message,'err'));
 }
 
