@@ -45,7 +45,9 @@ ipcMain.handle('get-config', () => ({
   server: config ? config.server : '',
   deviceKey: getDeviceKey(),
   deviceName: (config && config.device_name) || os.hostname(),
-  hostname: os.hostname()
+  hostname: os.hostname(),
+  osVersion: 'Windows ' + os.release(),
+  platform: 'windows'
 }));
 
 ipcMain.handle('test-server', async (ev, url) => {

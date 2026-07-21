@@ -372,6 +372,10 @@ app.put('/api/devices/:id', auth, canWrite, (req, res) => {
   if ('location' in b) { sets.push('location = ?'); vals.push((b.location || '').trim() || null); }
   if ('group_id' in b) { sets.push('group_id = ?'); vals.push(b.group_id || null); }
   if ('approved' in b) { sets.push('approved = ?'); vals.push(b.approved ? 1 : 0); }
+  if ('screen_size' in b) {
+    sets.push('screen_size = ?');
+    vals.push(b.screen_size === '' || b.screen_size == null ? null : clamp(b.screen_size, 5, 200, null));
+  }
   if (sets.length) db.prepare(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`).run(...vals, d.id);
   res.json(db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id));
 });
@@ -388,19 +392,22 @@ app.post('/api/devices/:id/command', auth, canWrite, (req, res) => {
 
 // ---------- API do Player (sem JWT; autentica por device_key) ----------
 app.post('/api/devices/register', (req, res) => {
-  const { device_key, device_name, resolution, os_version, client_version } = req.body || {};
+  const { device_key, device_name, resolution, os_version, client_version, platform } = req.body || {};
   if (!device_key) return res.status(400).json({ error: 'device_key obrigatório' });
+  // plataforma é declarada pelo próprio agente (não inferida do user-agent) — 'windows' | 'android'
+  const plat = ['windows', 'android'].includes(platform) ? platform : null;
   let d = db.prepare('SELECT * FROM devices WHERE device_key = ?').get(device_key);
   if (!d) {
     const id = uuid();
-    db.prepare(`INSERT INTO devices (id, name, device_key, resolution, os_version, client_version, status)
-                VALUES (?,?,?,?,?,?, 'online')`)
-      .run(id, device_name || 'Novo dispositivo', device_key, resolution || null, os_version || null, client_version || null);
+    db.prepare(`INSERT INTO devices (id, name, device_key, resolution, os_version, client_version, platform, status)
+                VALUES (?,?,?,?,?,?,?, 'online')`)
+      .run(id, device_name || 'Novo dispositivo', device_key, resolution || null, os_version || null, client_version || null, plat);
     d = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
   } else {
     db.prepare(`UPDATE devices SET resolution = COALESCE(?, resolution),
-                os_version = COALESCE(?, os_version), client_version = COALESCE(?, client_version)
-                WHERE id = ?`).run(resolution, os_version, client_version, d.id);
+                os_version = COALESCE(?, os_version), client_version = COALESCE(?, client_version),
+                platform = COALESCE(?, platform)
+                WHERE id = ?`).run(resolution, os_version, client_version, plat, d.id);
   }
   res.json({ device_id: d.id, approved: !!d.approved });
 });

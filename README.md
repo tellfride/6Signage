@@ -20,7 +20,11 @@ com painel de controle web responsivo (desktop e celular).
 
 **Painel web (responsivo, mobile-first, tema claro/escuro)**
 - Dashboard "video wall": cada TV é um card com status ao vivo (online/offline), o que
-  está no ar agora, resolução e grupo — atualizado a cada 15 s
+  está no ar agora, resolução, orientação e grupo — atualizado a cada 15 s
+- **Inventário de cada tela**: plataforma (Windows ou Android) **detectada automaticamente
+  pelo próprio agente** no registro — sem digitação manual; tamanho físico em polegadas
+  (editável, já que nenhum software expõe o tamanho de um monitor) e local, para um
+  parque com tamanhos e orientações variados (18" a 70", paisagem ou retrato)
 - Aprovação manual de novas telas (segurança: nenhum player entra sozinho)
 - Editor de playlists: ordem, duração por item, transições (fade/corte), duração total do ciclo
 - **Editor de layout com pré-visualização ao vivo** (por tela): liga/desliga o painel de

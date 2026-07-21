@@ -153,6 +153,10 @@ ensureColumn('devices', 'ticker_height', 'INTEGER DEFAULT 12');
 // v1.2: perfil de LAYOUT atrelável a um grupo (default) ou a uma tela (override explícito)
 ensureColumn('devices', 'layout_id', 'TEXT REFERENCES layouts(id) ON DELETE SET NULL');
 ensureColumn('device_groups', 'layout_id', 'TEXT REFERENCES layouts(id) ON DELETE SET NULL');
+// v1.3: inventário — tamanho físico (manual, ninguém expõe polegadas via software) e
+// plataforma do agente (automática: o próprio player informa quem ele é no registro)
+ensureColumn('devices', 'screen_size', 'INTEGER');
+ensureColumn('devices', 'platform', 'TEXT');
 
 // Converte a configuração antiga (por dispositivo) em perfis reutilizáveis.
 // Roda uma única vez: limpa os flags legados ao final de cada conversão.

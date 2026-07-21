@@ -233,6 +233,7 @@ public class MainActivity extends Activity {
                 o.put("deviceName", prefs.getString("device_name",
                         android.os.Build.MODEL != null ? "TV_" + android.os.Build.MODEL.replace(" ", "_") : "TV_Android"));
                 o.put("osVersion", "Android " + android.os.Build.VERSION.RELEASE);
+                o.put("platform", "android");
                 return o.toString();
             } catch (Exception e) { return "{}"; }
         }
