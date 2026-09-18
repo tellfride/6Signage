@@ -1624,9 +1624,18 @@ async function loadCompanies(){
           </div>
         </div>
         <div class="row" style="margin-top:9px">
+          <div class="grow" style="min-width:260px;flex-basis:100%">
+            <label class="lbl">Mensagem personalizada (topo do aviso)</label>
+            <textarea id="cm-${c.id}" placeholder="Ex.: Olá, time da ${esc(c.name)}! Aqui é a T-Labex Tecnologia."
+              style="width:100%;min-height:60px">${esc(c.message_header||'')}</textarea>
+            <div class="sub">Entra antes do aviso automático de vencimento. Vazio = usa só o texto padrão.</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:9px">
           <button class="btn sm" onclick="saveCompany('${c.id}')">Salvar</button>
           <button class="btn ghost sm" onclick="renewCompany('${c.id}',30)">Renovar +30 dias</button>
           <button class="btn ghost sm" onclick="renewCompany('${c.id}',365)">Renovar +1 ano</button>
+          <button class="btn ghost sm" onclick="notifyCompany('${c.id}')">📲 Enviar aviso agora</button>
         </div>
       </div>
     </div>`).join('')+`</div></div>`;
@@ -1642,11 +1651,20 @@ function saveCompany(id){
   const limitRaw = $('#cl-'+id).value;
   const screen_limit = limitRaw===''? null : Number(limitRaw);
   const whatsapp = $('#cw-'+id).value.trim();
-  api('/companies/'+id,{method:'PUT',body:{due_date,screen_limit,whatsapp}})
+  const message_header = $('#cm-'+id).value.trim();
+  api('/companies/'+id,{method:'PUT',body:{due_date,screen_limit,whatsapp,message_header}})
     .then(()=>{toast('Empresa atualizada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
 }
 const renewCompany = (id,days) => api('/companies/'+id+'/renew',{method:'POST',body:{days}})
   .then(()=>{toast('Assinatura renovada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
+function notifyCompany(id){
+  api('/companies/'+id+'/notify',{method:'POST'})
+    .then(r=>{
+      toast(r.ok ? 'Aviso enviado pelo WhatsApp' : 'Não enviou: '+(r.error||'erro desconhecido'), r.ok?'ok':'err');
+      if(!r.ok) console.log('Mensagem que seria enviada:\n'+r.message);
+    })
+    .catch(e=>toast(e.message,'err'));
+}
 const toggleCompany = (id,active) => api('/companies/'+id,{method:'PUT',body:{active:!!active}})
   .then(()=>{toast('Empresa atualizada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
 

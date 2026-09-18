@@ -370,6 +370,7 @@ app.put('/api/companies/:id', auth, superAdminOnly, (req, res) => {
       due_date = ?,
       screen_limit = ?,
       whatsapp = COALESCE(?, whatsapp),
+      message_header = ?,
       last_reminder_stage = CASE WHEN ? THEN NULL ELSE last_reminder_stage END
       WHERE id = ?`)
     .run(
@@ -378,6 +379,7 @@ app.put('/api/companies/:id', auth, superAdminOnly, (req, res) => {
       'due_date' in b ? (b.due_date || null) : c.due_date,
       'screen_limit' in b ? (b.screen_limit === '' || b.screen_limit == null ? null : b.screen_limit) : c.screen_limit,
       b.whatsapp ?? null,
+      'message_header' in b ? (b.message_header || null) : c.message_header,
       'due_date' in b ? 1 : 0,
       c.id);
   const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(c.id);
@@ -401,6 +403,23 @@ app.post('/api/companies/:id/renew', auth, superAdminOnly, (req, res) => {
   const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(c.id);
   updated.device_count = deviceCount(c.id);
   res.json(updated);
+});
+
+// Disparo manual do aviso de WhatsApp — não espera o cron das 9h, e ignora o
+// guard de "já mandei esse estágio" de propósito (é uma ação explícita).
+// Sem due_date cadastrado, ainda assim manda o topo personalizado (se houver)
+// com uma linha genérica no lugar do aviso de vencimento.
+app.post('/api/companies/:id/notify', auth, superAdminOnly, async (req, res) => {
+  const c = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Empresa não encontrada' });
+  if (!c.whatsapp) return res.status(400).json({ error: 'Cadastre o WhatsApp da empresa antes de disparar um aviso' });
+  const stage = dueStage(c) || 'pre_due'; // fora da janela de 3 dias mas com due_date: ainda assim avisa
+  const text = buildDueMessage(c, stage);
+  const result = await sendWhatsApp(c.whatsapp, text);
+  if (stage !== 'none') db.prepare('UPDATE companies SET last_reminder_stage = ? WHERE id = ?').run(stage, c.id);
+  db.prepare('INSERT INTO notifications_log (id, company_id, channel, kind, success, detail) VALUES (?,?,?,?,?,?)')
+    .run(uuid(), c.id, 'whatsapp', 'manual_' + stage, result.ok ? 1 : 0, result.error);
+  res.json({ ok: result.ok, error: result.error, message: text });
 });
 
 // Dados da própria empresa (qualquer papel autenticado) — usado pelo painel
@@ -1213,21 +1232,37 @@ function notifyPlaylistDevices(playlistId) {
 // ---------- Aviso de vencimento por WhatsApp ----------
 // Faixas de dias (não um dia exato): se o servidor ficar fora do ar no dia
 // certo, o próximo boot ainda calcula o estágio correto a partir da data,
-// em vez de perder o aviso. last_reminder_stage evita reenviar o mesmo aviso.
-async function checkDueDates() {
+// em vez de perder o aviso. last_reminder_stage evita reenviar o mesmo aviso
+// automático — o disparo manual (POST /companies/:id/notify) ignora esse guard
+// de propósito, porque é uma ação explícita do super_admin.
+function dueStage(c) {
+  if (!c.due_date) return 'none';
   const today = new Date().toISOString().slice(0, 10);
+  const daysLeft = Math.round((new Date(c.due_date) - new Date(today)) / 86400000);
+  return daysLeft > 3 ? null : daysLeft >= 1 ? 'pre_due' : daysLeft === 0 ? 'due' : 'overdue';
+}
+// message_header é o "topo" que o super_admin escreve por empresa (ex.: saudação
+// com o nome do contato, ou uma linha de marca) — vem sempre antes do aviso
+// automático de vencimento, nunca substitui a parte que informa a data.
+function buildDueMessage(c, stage) {
+  const header = (c.message_header || '').trim();
+  const bodies = {
+    pre_due: `A assinatura do VitriniON da ${c.name} vence em breve (${c.due_date}). Entre em contato para renovar.`,
+    due: `A assinatura do VitriniON da ${c.name} vence hoje (${c.due_date}). Renove para manter o acesso.`,
+    overdue: `A assinatura do VitriniON da ${c.name} está vencida desde ${c.due_date}. O acesso ao painel foi bloqueado.`,
+    none: `Este é um aviso sobre a assinatura do VitriniON da ${c.name}.`
+  };
+  const body = bodies[stage] || bodies.none;
+  return header ? `${header}\n\n${body}` : `Olá! ${body}`;
+}
+
+async function checkDueDates() {
   const companies = db.prepare(`SELECT * FROM companies WHERE due_date IS NOT NULL AND active = 1`).all();
   for (const c of companies) {
-    const daysLeft = Math.round((new Date(c.due_date) - new Date(today)) / 86400000);
-    const stage = daysLeft > 3 ? null : daysLeft >= 1 ? 'pre_due' : daysLeft === 0 ? 'due' : 'overdue';
-    if (!stage || stage === c.last_reminder_stage) continue;
-    const texts = {
-      pre_due: `Olá! A assinatura do VitriniON da ${c.name} vence em breve (${c.due_date}). Entre em contato para renovar.`,
-      due: `Olá! A assinatura do VitriniON da ${c.name} vence hoje (${c.due_date}). Renove para manter o acesso.`,
-      overdue: `Olá! A assinatura do VitriniON da ${c.name} está vencida desde ${c.due_date}. O acesso ao painel foi bloqueado.`
-    };
+    const stage = dueStage(c);
+    if (!stage || stage === 'none' || stage === c.last_reminder_stage) continue;
     const result = c.whatsapp
-      ? await sendWhatsApp(c.whatsapp, texts[stage])
+      ? await sendWhatsApp(c.whatsapp, buildDueMessage(c, stage))
       : { ok: false, error: 'sem_whatsapp_cadastrado' };
     db.prepare('UPDATE companies SET last_reminder_stage = ? WHERE id = ?').run(stage, c.id);
     db.prepare('INSERT INTO notifications_log (id, company_id, channel, kind, success, detail) VALUES (?,?,?,?,?,?)')

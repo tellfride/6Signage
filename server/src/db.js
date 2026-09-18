@@ -204,6 +204,7 @@ ensureColumn('companies', 'due_date', 'TEXT');
 ensureColumn('companies', 'screen_limit', 'INTEGER');
 ensureColumn('companies', 'whatsapp', 'TEXT');
 ensureColumn('companies', 'last_reminder_stage', 'TEXT');
+ensureColumn('companies', 'message_header', 'TEXT'); // topo personalizado da mensagem de WhatsApp
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS notifications_log (
