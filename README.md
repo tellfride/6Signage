@@ -289,6 +289,32 @@ telas (`screen_limit`), configuráveis pelo `super_admin` na aba **Empresas** do
   horário do cron, defina `CHECK_DUE_ON_BOOT=1` — a checagem roda uma vez assim que
   o servidor sobe.
 
+## Anunciantes e painel de rendimentos
+
+Aba **Anunciantes** (admin da empresa ou `super_admin`) — para quem revende espaço nas
+próprias telas (ex.: um shopping que exibe anúncios de lojas). É uma camada separada da
+assinatura da empresa acima: aqui o "cliente" é quem paga a empresa para anunciar, não
+quem paga a T-Labex pelo VitriniON.
+
+- **Cadastro**: nome, valor do contrato, prazo (dias do ciclo de renovação) e WhatsApp
+  opcional. O vencimento é calculado automaticamente a partir de hoje + prazo.
+- **Painel de rendimentos**: receita mensal recorrente (valor normalizado pelo prazo de
+  cada anunciante ativo), fechamentos do mês corrente, quantos vencem nos próximos 7 dias,
+  quantos já venceram, e um gráfico de barras com os fechamentos das próximas 8 semanas.
+- **`super_admin` vê tudo de todos**: sem uma empresa ativa selecionada na barra lateral,
+  o painel (lista e métricas) agrega todas as empresas, com o nome de cada uma ao lado do
+  anunciante.
+- **WhatsApp com modelos prontos**: cada anunciante tem um botão que abre 3 modelos de
+  mensagem (lembrete, vence hoje, vencido) já preenchidos com nome e data — editável antes
+  de enviar. Usa o mesmo adaptador (`server/src/whatsapp.js`) da assinatura da empresa.
+
+## Senhas
+
+- Qualquer usuário troca a própria senha pelo ícone de chave na barra lateral (exige a
+  senha atual). Um admin troca a senha de outra conta pela aba **Usuários** (não exige a
+  senha atual da conta alheia). Os dois fluxos pedem confirmação da nova senha antes de
+  salvar, assim como a criação de conta/empresa.
+
 ## Roadmap
 
 - [x] **Fase 1 (MVP)**: auth, mídia, playlists, grupos, players Windows/Android, tempo real,
@@ -297,6 +323,9 @@ telas (`screen_limit`), configuráveis pelo `super_admin` na aba **Empresas** do
   multi-tenancy (empresas isoladas + super_admin), hardening (rate limit, helmet, JWT_SECRET obrigatório)
 - [x] **Fase 1.6**: assinatura por empresa (vencimento, limite de telas, bloqueio automático),
   aviso de vencimento por WhatsApp (Evolution API)
+- [x] **Fase 1.7**: aba Anunciantes (cadastro + painel de rendimentos por empresa, com
+  visão agregada para o `super_admin`), WhatsApp com modelos prontos por anunciante,
+  troca de senha self-service e modais de confirmação de senha
 - [ ] **Fase 2**: agendamentos (horário/dias da semana/prioridade), PostgreSQL, refresh tokens,
   screenshots ao vivo, `/media`/`/backgrounds` tenant-aware, cookie httpOnly para o token do painel
 - [ ] **Fase 3**: relatórios proof-of-play, transcodificação automática (FFmpeg), multi-tela, alertas de tela offline

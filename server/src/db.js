@@ -206,7 +206,27 @@ ensureColumn('companies', 'whatsapp', 'TEXT');
 ensureColumn('companies', 'last_reminder_stage', 'TEXT');
 ensureColumn('companies', 'message_header', 'TEXT'); // topo personalizado da mensagem de WhatsApp
 
+// v1.6: anunciantes — os clientes de anúncio de CADA empresa (ex.: um shopping
+// vende espaço nas telas para as lojas; "anunciante" é a loja, não a empresa
+// que assina o VitriniON). due_date é o vencimento do ciclo/contrato atual.
 db.exec(`
+CREATE TABLE IF NOT EXISTS advertisers (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  contact TEXT,
+  whatsapp TEXT,
+  value REAL NOT NULL DEFAULT 0,
+  term_days INTEGER NOT NULL DEFAULT 30,
+  start_date TEXT NOT NULL,
+  due_date TEXT NOT NULL,
+  active INTEGER DEFAULT 1,
+  last_reminder_stage TEXT,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_adv_company ON advertisers(company_id);
+
 CREATE TABLE IF NOT EXISTS notifications_log (
   id TEXT PRIMARY KEY,
   company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
@@ -214,6 +234,7 @@ CREATE TABLE IF NOT EXISTS notifications_log (
   sent_at TEXT DEFAULT (datetime('now'))
 );
 `);
+ensureColumn('notifications_log', 'advertiser_id', 'TEXT REFERENCES advertisers(id) ON DELETE SET NULL');
 
 // legado (v0.3): configuração de clima/rodapé direto no dispositivo
 ensureColumn('devices', 'weather_enabled', 'INTEGER DEFAULT 0');

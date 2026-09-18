@@ -46,6 +46,11 @@ function clamp(v, lo, hi, dflt) {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
 }
+// Dias entre hoje e uma data 'YYYY-MM-DD' (negativo = já passou).
+function daysUntil(dateStr) {
+  const today = new Date().toISOString().slice(0, 10);
+  return Math.round((new Date(dateStr + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
+}
 
 // Perfil de layout que efetivamente comanda a aparência da tela:
 // override na própria tela > padrão do grupo > nenhum (cai nas colunas legadas).
@@ -250,6 +255,19 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   res.json({ token, user: { id: user.id, email: user.email, role: user.role, company_id: user.company_id } });
 });
 
+// Troca de senha self-service (qualquer papel) — exige a senha atual, diferente
+// do reset feito por um admin em cima da conta de outra pessoa (PUT /users/:id).
+app.post('/api/auth/change-password', auth, (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (!new_password || new_password.length < 6)
+    return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres' });
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user || !bcrypt.compareSync(current_password || '', user.password_hash))
+    return res.status(401).json({ error: 'Senha atual incorreta' });
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(new_password, 10), user.id);
+  res.json({ ok: true });
+});
+
 // ---------- Usuários (admin da própria empresa, ou super_admin em qualquer uma) ----------
 app.get('/api/users', auth, adminOnly, (req, res) => {
   const cid = companyCtx(req);
@@ -431,6 +449,165 @@ app.get('/api/company', auth, (req, res) => {
   if (!c) return res.json(null);
   c.device_count = deviceCount(c.id);
   res.json(c);
+});
+
+// ---------- Anunciantes (clientes de anúncio de CADA empresa — ex.: as lojas
+// que pagam a um shopping para aparecer nas telas dele) ----------
+// Mesmas faixas de dias usadas para a assinatura da empresa (ver dueStage mais
+// abaixo), aplicadas ao vencimento do contrato do anunciante.
+function advStage(a) {
+  const d = daysUntil(a.due_date);
+  return d > 3 ? null : d >= 1 ? 'pre_due' : d === 0 ? 'due' : 'overdue';
+}
+// Mensagens prontas para o botão de WhatsApp — o admin da empresa escolhe uma,
+// edita se quiser, e só então dispara (POST /advertisers/:id/notify).
+function serializeAdvertiser(a) {
+  const d = daysUntil(a.due_date);
+  const dueFmt = a.due_date.split('-').reverse().join('/');
+  return {
+    ...a, days_left: d, stage: advStage(a) || 'ok',
+    templates: {
+      pre_due: `Olá, ${a.name}! Seu anúncio no VitriniON vence em ${d} dia${d === 1 ? '' : 's'}, em ${dueFmt}. Para continuar em exibição, entre em contato para renovar.`,
+      due: `Olá, ${a.name}! Seu anúncio vence hoje (${dueFmt}). Renove para manter seu anúncio em exibição.`,
+      overdue: `Olá, ${a.name}! Seu anúncio está vencido desde ${dueFmt} e pode sair da programação. Entre em contato para renovar.`
+    }
+  };
+}
+
+app.get('/api/advertisers', auth, adminOnly, (req, res) => {
+  const cid = companyCtx(req);
+  const rows = cid
+    ? db.prepare('SELECT * FROM advertisers WHERE company_id = ? ORDER BY due_date').all(cid)
+    : db.prepare(`SELECT a.*, c.name AS company_name FROM advertisers a
+                  JOIN companies c ON c.id = a.company_id ORDER BY a.due_date`).all();
+  res.json(rows.map(serializeAdvertiser));
+});
+
+// Painel de rendimentos: receita mensal recorrente (valor normalizado pelo prazo
+// de cada anunciante), fechamentos do mês corrente e uma grade de 8 semanas para
+// visualizar quando os próximos vencimentos (= possíveis renovações) caem.
+app.get('/api/advertisers/stats', auth, adminOnly, (req, res) => {
+  const cid = companyCtx(req);
+  const rows = cid
+    ? db.prepare('SELECT * FROM advertisers WHERE company_id = ?').all(cid)
+    : db.prepare('SELECT * FROM advertisers').all();
+  const active = rows.filter(a => a.active);
+  const mrr = active.reduce((s, a) => s + (a.value / Math.max(1, a.term_days / 30)), 0);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = today.slice(0, 7) + '-01';
+  const monthEndD = new Date(monthStart + 'T00:00:00Z'); monthEndD.setUTCMonth(monthEndD.getUTCMonth() + 1);
+  const monthEnd = monthEndD.toISOString().slice(0, 10);
+  const closingsMonth = active.filter(a => a.due_date >= monthStart && a.due_date < monthEnd);
+  const dueSoon = active.filter(a => { const d = daysUntil(a.due_date); return d >= 0 && d <= 7; });
+  const overdue = active.filter(a => daysUntil(a.due_date) < 0);
+
+  // Semana começando na segunda-feira, para bater com o calendário comercial.
+  function mondayOf(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    const day = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() + ((day === 0 ? -6 : 1) - day));
+    return d;
+  }
+  const w0 = mondayOf(today);
+  const weekly = [];
+  for (let i = 0; i < 8; i++) {
+    const ws = new Date(w0); ws.setUTCDate(ws.getUTCDate() + i * 7);
+    const we = new Date(ws); we.setUTCDate(we.getUTCDate() + 6);
+    const wsS = ws.toISOString().slice(0, 10), weS = we.toISOString().slice(0, 10);
+    const inWeek = active.filter(a => a.due_date >= wsS && a.due_date <= weS);
+    weekly.push({ start: wsS, end: weS, count: inWeek.length, value: inWeek.reduce((s, a) => s + a.value, 0) });
+  }
+
+  res.json({
+    mrr, active_count: active.length, total_count: rows.length,
+    closings_month: { count: closingsMonth.length, value: closingsMonth.reduce((s, a) => s + a.value, 0) },
+    due_soon: dueSoon.length, overdue: overdue.length,
+    weekly
+  });
+});
+
+app.post('/api/advertisers', auth, adminOnly, (req, res) => {
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de cadastrar um anunciante' });
+  const { name, value, term_days, start_date, whatsapp, contact, notes } = req.body || {};
+  if (!name || !value) return res.status(400).json({ error: 'Nome e valor são obrigatórios' });
+  const termD = clamp(term_days, 1, 3650, 30);
+  const start = start_date || new Date().toISOString().slice(0, 10);
+  const due = new Date(start + 'T00:00:00Z'); due.setUTCDate(due.getUTCDate() + termD);
+  const id = uuid();
+  db.prepare(`INSERT INTO advertisers (id, company_id, name, contact, whatsapp, value, term_days, start_date, due_date, notes)
+              VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, cid, name, contact || null, whatsapp || null, Number(value) || 0, termD, start,
+         due.toISOString().slice(0, 10), notes || null);
+  res.status(201).json(serializeAdvertiser(db.prepare('SELECT * FROM advertisers WHERE id = ?').get(id)));
+});
+
+app.put('/api/advertisers/:id', auth, adminOnly, (req, res) => {
+  const a = db.prepare('SELECT * FROM advertisers WHERE id = ?').get(req.params.id);
+  if (!a || !ownedRow(req.user, a)) return res.status(404).json({ error: 'Anunciante não encontrado' });
+  const b = req.body || {};
+  db.prepare(`UPDATE advertisers SET
+      name = COALESCE(?, name),
+      contact = ?,
+      whatsapp = COALESCE(?, whatsapp),
+      value = COALESCE(?, value),
+      term_days = COALESCE(?, term_days),
+      due_date = COALESCE(?, due_date),
+      active = COALESCE(?, active),
+      notes = ?,
+      last_reminder_stage = CASE WHEN ? THEN NULL ELSE last_reminder_stage END
+      WHERE id = ?`)
+    .run(
+      b.name ?? null,
+      'contact' in b ? (b.contact || null) : a.contact,
+      b.whatsapp ?? null,
+      b.value != null ? Number(b.value) : null,
+      b.term_days != null ? clamp(b.term_days, 1, 3650, a.term_days) : null,
+      'due_date' in b ? (b.due_date || a.due_date) : null,
+      b.active === undefined ? null : (b.active ? 1 : 0),
+      'notes' in b ? (b.notes || null) : a.notes,
+      'due_date' in b ? 1 : 0,
+      a.id);
+  res.json(serializeAdvertiser(db.prepare('SELECT * FROM advertisers WHERE id = ?').get(a.id)));
+});
+
+// Atalho de renovação: soma dias (padrão = o próprio prazo do contrato) a partir
+// do vencimento atual (se ainda for futuro) ou de hoje (se já venceu).
+app.post('/api/advertisers/:id/renew', auth, adminOnly, (req, res) => {
+  const a = db.prepare('SELECT * FROM advertisers WHERE id = ?').get(req.params.id);
+  if (!a || !ownedRow(req.user, a)) return res.status(404).json({ error: 'Anunciante não encontrado' });
+  const days = clamp(req.body?.days, 1, 3650, a.term_days);
+  const today = new Date().toISOString().slice(0, 10);
+  const base = a.due_date > today ? a.due_date : today;
+  const next = new Date(base + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + days);
+  db.prepare('UPDATE advertisers SET due_date = ?, active = 1, last_reminder_stage = NULL WHERE id = ?')
+    .run(next.toISOString().slice(0, 10), a.id);
+  res.json(serializeAdvertiser(db.prepare('SELECT * FROM advertisers WHERE id = ?').get(a.id)));
+});
+
+// Disparo do WhatsApp a partir de um modelo pronto (o texto final já vem
+// composto do painel — o admin pode editar antes de enviar).
+app.post('/api/advertisers/:id/notify', auth, adminOnly, async (req, res) => {
+  const a = db.prepare('SELECT * FROM advertisers WHERE id = ?').get(req.params.id);
+  if (!a || !ownedRow(req.user, a)) return res.status(404).json({ error: 'Anunciante não encontrado' });
+  if (!a.whatsapp) return res.status(400).json({ error: 'Cadastre o WhatsApp do anunciante antes de enviar' });
+  const text = (req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Mensagem vazia' });
+  const result = await sendWhatsApp(a.whatsapp, text);
+  const stage = advStage(a);
+  if (stage) db.prepare('UPDATE advertisers SET last_reminder_stage = ? WHERE id = ?').run(stage, a.id);
+  db.prepare(`INSERT INTO notifications_log (id, company_id, advertiser_id, channel, kind, success, detail)
+              VALUES (?,?,?,?,?,?,?)`)
+    .run(uuid(), a.company_id, a.id, 'whatsapp', 'manual_advertiser', result.ok ? 1 : 0, result.error);
+  res.json({ ok: result.ok, error: result.error });
+});
+
+app.delete('/api/advertisers/:id', auth, adminOnly, (req, res) => {
+  const a = db.prepare('SELECT * FROM advertisers WHERE id = ?').get(req.params.id);
+  if (!a || !ownedRow(req.user, a)) return res.status(404).json({ error: 'Anunciante não encontrado' });
+  db.prepare('DELETE FROM advertisers WHERE id = ?').run(a.id);
+  res.json({ ok: true });
 });
 
 // ---------- Mídia ----------

@@ -272,7 +272,20 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
 .dot.dead{background:var(--faint)}
 .dot.wait{background:var(--wait);box-shadow:0 0 8px var(--wait)}
 .rail .sep{width:1px;height:22px;background:var(--line)}
-.rail .m.live .n{color:var(--live)} .rail .m.wait .n{color:var(--wait)}
+.rail .m.live .n{color:var(--live)} .rail .m.wait .n{color:var(--wait)} .rail .m.dead .n{color:var(--dead)}
+.ico:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+
+/* ---- painel de rendimentos (Anunciantes) ---- */
+.wk-strip{display:flex;align-items:flex-end;gap:7px;padding:4px 2px 0}
+.wk-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.wk-track{width:100%;height:96px;display:flex;align-items:flex-end;justify-content:center}
+.wk-bar{width:56%;min-width:5px;border-radius:5px 5px 2px 2px;
+  background:linear-gradient(180deg,var(--act),color-mix(in srgb,var(--act) 30%,transparent));
+  transition:height .35s cubic-bezier(.2,.7,.3,1)}
+.wk-col.now .wk-bar{background:linear-gradient(180deg,var(--live),color-mix(in srgb,var(--live) 30%,transparent))}
+.wk-val{font-size:10px;font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.wk-lbl{font-size:10px;color:var(--faint);text-align:center;line-height:1.25}
+.wk-col.now .wk-lbl{color:var(--live);font-weight:700}
 
 /* ============ ASSINATURA: espelho fiel da tela ============ */
 .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:15px}
@@ -427,9 +440,9 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
 .mc .in .grow{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 
 /* modais */
-#modal,#assignModal{position:fixed;inset:0;background:rgba(4,6,10,.72);backdrop-filter:blur(4px);z-index:200;
+#modal,#assignModal,#waModal,#pwModal{position:fixed;inset:0;background:rgba(4,6,10,.72);backdrop-filter:blur(4px);z-index:200;
   display:none;align-items:center;justify-content:center;padding:16px}
-#modal.on,#assignModal.on{display:flex}
+#modal.on,#assignModal.on,#waModal.on,#pwModal.on{display:flex}
 .sheet{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 70px -20px rgba(0,0,0,.7);
   width:min(840px,100%);max-height:92vh;overflow:auto}
 .sheet-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;
@@ -618,6 +631,7 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
       <b id="uemail"></b><span class="lbl" id="urole"></span>
       <div id="companySwitcher"></div>
       <div class="row" style="gap:7px">
+        <button class="ico btnChangePw" onclick="openPwSelf()" title="Alterar senha" aria-label="Alterar senha"></button>
         <button class="ico theme" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema"></button>
         <button class="btn ghost sm" style="flex:1;justify-content:center" onclick="logout()">Sair</button>
       </div>
@@ -627,6 +641,7 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
     <div id="topbar">
       <div class="brand"><span class="logo"><i></i></span>VitriniON</div>
       <div class="row" style="gap:7px">
+        <button class="ico btnChangePw" onclick="openPwSelf()" title="Alterar senha" aria-label="Alterar senha"></button>
         <button class="ico theme" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema"></button>
         <button class="btn ghost sm" onclick="logout()">Sair</button>
       </div>
@@ -638,6 +653,7 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
       <section id="tab-media" class="hidden"></section>
       <section id="tab-groups" class="hidden"></section>
       <section id="tab-users" class="hidden"></section>
+      <section id="tab-advertisers" class="hidden"></section>
       <section id="tab-companies" class="hidden"></section>
       <footer class="verfoot"><span>VITRINION</span><i></i><span class="mono" id="verTag">···</span></footer>
     </main>
@@ -740,6 +756,53 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
   </div>
 </div>
 
+<div id="waModal" onclick="if(event.target===this)closeWa()">
+  <div class="sheet" style="width:min(560px,100%)">
+    <div class="sheet-h">
+      <h3>Enviar WhatsApp — <span id="waName"></span></h3>
+      <button class="ico" onclick="closeWa()" aria-label="Fechar">✕</button>
+    </div>
+    <div style="padding:17px 20px">
+      <div class="seg" id="waTpl"></div>
+      <label class="lbl" style="display:block;margin:4px 0 5px">Mensagem</label>
+      <textarea id="waText" style="width:100%;min-height:130px"></textarea>
+      <div class="sub" style="margin-top:6px">Editável antes de enviar. Vai para o WhatsApp cadastrado deste anunciante.</div>
+    </div>
+    <div class="sheet-f">
+      <button class="btn ghost" onclick="closeWa()">Cancelar</button>
+      <button class="btn" onclick="sendWa()">📲 Enviar</button>
+    </div>
+  </div>
+</div>
+
+<div id="pwModal" onclick="if(event.target===this)closePw()">
+  <div class="sheet" style="width:min(420px,100%)">
+    <div class="sheet-h">
+      <h3 id="pwTitle">Alterar senha</h3>
+      <button class="ico" onclick="closePw()" aria-label="Fechar">✕</button>
+    </div>
+    <div style="padding:17px 20px;display:flex;flex-direction:column;gap:11px">
+      <div id="pwCurrentWrap">
+        <label class="lbl">Senha atual</label>
+        <input id="pwCurrent" type="password" style="width:100%" autocomplete="current-password">
+      </div>
+      <div>
+        <label class="lbl">Nova senha</label>
+        <input id="pwNew" type="password" style="width:100%" autocomplete="new-password">
+      </div>
+      <div>
+        <label class="lbl">Confirmar nova senha</label>
+        <input id="pwConfirm" type="password" style="width:100%" autocomplete="new-password">
+      </div>
+      <div class="sub" id="pwErr" style="color:var(--dead);min-height:15px"></div>
+    </div>
+    <div class="sheet-f">
+      <button class="btn ghost" onclick="closePw()">Cancelar</button>
+      <button class="btn" onclick="submitPw()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <script>
@@ -781,7 +844,9 @@ const I = {
   scrPortrait:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2.2"/></svg>',
   grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.3"/><rect x="13" y="3" width="8" height="8" rx="1.3"/><rect x="3" y="13" width="8" height="8" rx="1.3"/><rect x="13" y="13" width="8" height="8" rx="1.3"/></svg>',
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.2" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>',
-  companies:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 21V7l7-4v18M3 21h18M10 21V7l7 4v10"/><path d="M6.5 11h0M6.5 15h0M13.5 12h0M13.5 16h0"/></svg>'
+  companies:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 21V7l7-4v18M3 21h18M10 21V7l7 4v10"/><path d="M6.5 11h0M6.5 15h0M13.5 12h0M13.5 16h0"/></svg>',
+  advertisers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6h3l6 4V5L6 9H3Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+  wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 18.13h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.25-4.36c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.69 8.23-8.23 8.23m4.52-6.17c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.06s.89 2.39 1.01 2.56c.12.16 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.67-1.18.21-.58.21-1.08.15-1.18-.06-.11-.22-.17-.47-.29"/></svg>'
 };
 const orientIcon = d => I[d.orientation==='portrait'?'scrPortrait':'scrLandscape'];
 
@@ -863,7 +928,7 @@ function logout(){ localStorage.removeItem('token'); token=null; location.reload
 function navHtml(){
   const role = userRole();
   const tabs=[['devices','Telas'],['playlists','Playlists'],['media','Mídia'],['groups','Grupos']];
-  if(role==='admin' || role==='super_admin') tabs.push(['users','Usuários']);
+  if(role==='admin' || role==='super_admin') tabs.push(['users','Usuários'],['advertisers','Anunciantes']);
   if(role==='super_admin') tabs.push(['companies','Empresas']);
   return tabs.map(([id,l])=>`<button data-tab="${id}" onclick="tab('${id}')">${I[id]||I.devices}<span>${l}</span></button>`).join('');
 }
@@ -875,6 +940,7 @@ function boot(){
   $('#sidenav').innerHTML = navHtml();
   $('#tabbar').innerHTML = navHtml();
   applyTheme(document.documentElement.dataset.theme);
+  document.querySelectorAll('.btnChangePw').forEach(b=>b.innerHTML=I.key);
   if (userRole()==='super_admin') renderCompanySwitcher(); else { $('#companySwitcher').innerHTML=''; renderDueBanner(); }
   tab('devices');
   setInterval(()=>{ if(!$('#tab-devices').classList.contains('hidden')) loadDevices(true) }, 15000);
@@ -912,7 +978,7 @@ function tab(name){
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
   $('#tab-'+name).classList.remove('hidden');
-  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups,users:loadUsers,companies:loadCompanies})[name]();
+  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups,users:loadUsers,advertisers:loadAdvertisers,companies:loadCompanies})[name]();
 }
 
 /* ================= TELAS — grade (video wall) ou lista ================= */
@@ -1536,7 +1602,8 @@ async function loadUsers(){
     <div class="card"><h3>Nova conta</h3>
       <div class="row">
         <input id="nuemail" class="grow" type="email" placeholder="E-mail">
-        <input id="nupass" class="grow" type="password" placeholder="Senha">
+        <input id="nupass" class="grow" type="password" placeholder="Senha" autocomplete="new-password">
+        <input id="nupass2" class="grow" type="password" placeholder="Confirmar senha" autocomplete="new-password">
         <select id="nurole" onchange="$('#nugroups').classList.toggle('hidden',this.value!=='manager')">
           <option value="manager">Editor</option>
           <option value="viewer">Visualizador</option>
@@ -1570,8 +1637,9 @@ async function loadUsers(){
     </div>`).join('')+`</div></div>`;
 }
 function createUser(){
-  const email=$('#nuemail').value.trim(), pass=$('#nupass').value, role=$('#nurole').value;
+  const email=$('#nuemail').value.trim(), pass=$('#nupass').value, pass2=$('#nupass2').value, role=$('#nurole').value;
   if(!email||!pass) return toast('Informe e-mail e senha','err');
+  if(pass!==pass2) return toast('As senhas não coincidem','err');
   const group_ids=[...document.querySelectorAll('.nu-g:checked')].map(c=>c.value);
   api('/users',{method:'POST',body:{email,password:pass,role,group_ids}})
     .then(()=>{toast('Conta criada','ok');loadUsers()}).catch(e=>toast(e.message,'err'));
@@ -1582,7 +1650,41 @@ function saveUserGroups(id){
   const group_ids=[...document.querySelectorAll('.ug-'+id+':checked')].map(c=>c.value);
   updUser(id,{group_ids});
 }
-function resetPass(id,email){ const p=prompt('Nova senha para '+email+':'); if(p) updUser(id,{password:p}) }
+function resetPass(id,email){ openPwAdmin(id,email) }
+
+/* ---------- troca de senha (modal — self-service ou reset por um admin) ---------- */
+let pwCtx = null;
+function openPwSelf(){
+  pwCtx = {mode:'self'};
+  $('#pwTitle').textContent = 'Alterar minha senha';
+  $('#pwCurrentWrap').style.display = '';
+  $('#pwCurrent').value=''; $('#pwNew').value=''; $('#pwConfirm').value=''; $('#pwErr').textContent='';
+  $('#pwModal').classList.add('on');
+}
+function openPwAdmin(userId,email){
+  pwCtx = {mode:'admin', userId};
+  $('#pwTitle').textContent = 'Trocar senha de '+email;
+  $('#pwCurrentWrap').style.display = 'none';
+  $('#pwCurrent').value=''; $('#pwNew').value=''; $('#pwConfirm').value=''; $('#pwErr').textContent='';
+  $('#pwModal').classList.add('on');
+}
+const closePw = () => $('#pwModal')?.classList.remove('on');
+function submitPw(){
+  const nw = $('#pwNew').value, cf = $('#pwConfirm').value;
+  if(nw.length<6) return $('#pwErr').textContent='A nova senha precisa ter ao menos 6 caracteres';
+  if(nw!==cf) return $('#pwErr').textContent='As senhas não coincidem';
+  if(pwCtx.mode==='self'){
+    const current = $('#pwCurrent').value;
+    if(!current) return $('#pwErr').textContent='Informe a senha atual';
+    api('/auth/change-password',{method:'POST',body:{current_password:current,new_password:nw}})
+      .then(()=>{toast('Senha alterada','ok');closePw()})
+      .catch(e=>$('#pwErr').textContent=e.message);
+  } else {
+    api('/users/'+pwCtx.userId,{method:'PUT',body:{password:nw}})
+      .then(()=>{toast('Senha atualizada','ok');closePw();loadUsers()})
+      .catch(e=>$('#pwErr').textContent=e.message);
+  }
+}
 const delUser = (id,email) => confirm('Excluir a conta '+email+'?') && api('/users/'+id,{method:'DELETE'})
   .then(()=>{toast('Conta excluída');loadUsers()}).catch(e=>toast(e.message,'err'));
 const unlockUser = (id,email) => api('/users/'+id+'/unlock',{method:'POST'})
@@ -1605,7 +1707,8 @@ async function loadCompanies(){
       <div class="row">
         <input id="ncname" class="grow" placeholder="Nome da empresa">
         <input id="ncemail" class="grow" type="email" placeholder="E-mail do admin">
-        <input id="ncpass" class="grow" type="password" placeholder="Senha do admin">
+        <input id="ncpass" class="grow" type="password" placeholder="Senha do admin" autocomplete="new-password">
+        <input id="ncpass2" class="grow" type="password" placeholder="Confirmar senha" autocomplete="new-password">
         <button class="btn" onclick="createCompany()">Criar empresa</button>
       </div>
       <div class="sub">Cria a empresa já com sua primeira conta administradora. Vencimento, limite de telas e WhatsApp se ajustam depois, em Editar.</div>
@@ -1653,8 +1756,9 @@ async function loadCompanies(){
     </div>`).join('')+`</div></div>`;
 }
 function createCompany(){
-  const name=$('#ncname').value.trim(), admin_email=$('#ncemail').value.trim(), admin_password=$('#ncpass').value;
+  const name=$('#ncname').value.trim(), admin_email=$('#ncemail').value.trim(), admin_password=$('#ncpass').value, pass2=$('#ncpass2').value;
   if(!name||!admin_email||!admin_password) return toast('Informe nome, e-mail e senha','err');
+  if(admin_password!==pass2) return toast('As senhas não coincidem','err');
   api('/companies',{method:'POST',body:{name,admin_email,admin_password}})
     .then(()=>{toast('Empresa criada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
 }
@@ -1679,6 +1783,160 @@ function notifyCompany(id){
 }
 const toggleCompany = (id,active) => api('/companies/'+id,{method:'PUT',body:{active:!!active}})
   .then(()=>{toast('Empresa atualizada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
+
+/* ================= ANUNCIANTES (clientes de anúncio de cada empresa) ================= */
+const fmtMoney = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+function advBadge(a){
+  if(!a.active) return `<span class="tag">Inativo</span>`;
+  if(a.stage==='overdue') return `<span class="tag dead">Vencido há ${-a.days_left}d</span>`;
+  if(a.stage==='due') return `<span class="tag wait">Vence hoje</span>`;
+  if(a.stage==='pre_due') return `<span class="tag wait">Vence em ${a.days_left}d</span>`;
+  return `<span class="tag live">Vence em ${a.days_left}d</span>`;
+}
+function weeklyBars(weeks){
+  const max = Math.max(1, ...weeks.map(w=>w.value));
+  const today = new Date().toISOString().slice(0,10);
+  return weeks.map(w=>{
+    const isNow = today>=w.start && today<=w.end;
+    const h = w.count ? Math.max(6, Math.round((w.value/max)*96)) : 4;
+    const [,sm,sd] = w.start.split('-');
+    return `<div class="wk-col ${isNow?'now':''}">
+      <span class="wk-val">${w.count?fmtMoney(w.value):'—'}</span>
+      <div class="wk-track"><div class="wk-bar" style="height:${h}px" title="${w.count} fechamento${w.count===1?'':'s'}"></div></div>
+      <span class="wk-lbl">${sd}/${sm}</span>
+    </div>`;
+  }).join('');
+}
+async function loadAdvertisers(){
+  const [list,stats] = await Promise.all([api('/advertisers'),api('/advertisers/stats')]);
+  window._advs_ = list;
+  const isSuper = userRole()==='super_admin';
+  const noActiveCompany = isSuper && !localStorage.getItem('activeCompany');
+  $('#tab-advertisers').innerHTML =
+    `<div class="head"><h2>Anunciantes</h2><span class="lbl">${list.length} cadastrados</span></div>
+    <div class="rail">
+      <div class="m live"><span class="n">${fmtMoney(stats.mrr)}</span><span class="t">receita mensal recorrente</span></div>
+      <div class="sep"></div>
+      <div class="m"><span class="n">${stats.closings_month.count}</span><span class="t">fechamentos no mês (${fmtMoney(stats.closings_month.value)})</span></div>
+      <div class="sep"></div>
+      <div class="m wait"><span class="n">${stats.due_soon}</span><span class="t">vencendo em 7 dias</span></div>
+      ${stats.overdue?`<div class="sep"></div><div class="m dead"><span class="n">${stats.overdue}</span><span class="t">vencido${stats.overdue===1?'':'s'}</span></div>`:''}
+    </div>
+    <div class="card"><h3>Fechamentos por semana</h3><div class="wk-strip">${weeklyBars(stats.weekly)}</div></div>
+    <div class="card"><h3>Novo anunciante</h3>
+      <div class="row">
+        <input id="naname" class="grow" placeholder="Nome do anunciante">
+        <input id="navalue" type="number" min="0" step="0.01" placeholder="Valor (R$)" style="max-width:140px">
+        <input id="naterm" type="number" min="1" value="30" placeholder="Prazo (dias)" style="max-width:120px">
+        <input id="nawa" placeholder="WhatsApp (opcional)" style="max-width:180px">
+        <button class="btn" onclick="createAdvertiser()">Cadastrar</button>
+      </div>
+      <div class="sub">Prazo é o ciclo de renovação do contrato (ex.: 30 dias). O vencimento é calculado a partir de hoje.
+      ${noActiveCompany?' Selecione a empresa ativa (barra lateral) antes de cadastrar.':''}</div>
+    </div>
+    <div class="card"><div class="list">`+
+    (list.length ? list.map(a=>`<div class="it">
+      <div class="grow"><b>${esc(a.name)}</b>
+        <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+          ${advBadge(a)}
+          <span class="tag">${fmtMoney(a.value)} / ${a.term_days}d</span>
+          ${a.company_name?`<span class="tag">${esc(a.company_name)}</span>`:''}
+          ${!a.whatsapp?'<span class="tag">Sem WhatsApp</span>':''}
+        </div></div>
+      <button class="btn ghost sm" onclick="$('#ae-${a.id}').classList.toggle('hidden')">Editar</button>
+      <button class="ico" onclick="openWa('${a.id}')" title="Enviar WhatsApp" aria-label="Enviar WhatsApp" ${a.whatsapp?'':'disabled'}>${I.wa}</button>
+      <button class="ico del" onclick="delAdvertiser('${a.id}','${esc(a.name)}')" title="Excluir" aria-label="Excluir">${I.x}</button>
+      <div id="ae-${a.id}" class="hidden" style="flex-basis:100%;margin-top:10px">
+        <div class="row">
+          <div class="grow" style="min-width:130px">
+            <label class="lbl">Valor (R$)</label>
+            <input id="av-${a.id}" type="number" min="0" step="0.01" value="${a.value}" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:120px">
+            <label class="lbl">Prazo (dias)</label>
+            <input id="at-${a.id}" type="number" min="1" value="${a.term_days}" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:150px">
+            <label class="lbl">Vencimento</label>
+            <input id="ad-${a.id}" type="date" value="${a.due_date}" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:190px">
+            <label class="lbl">WhatsApp (DDI+DDD+número)</label>
+            <input id="aw-${a.id}" value="${esc(a.whatsapp||'')}" placeholder="5521999999999" style="width:100%">
+          </div>
+        </div>
+        <div class="row" style="margin-top:9px">
+          <div class="grow" style="min-width:150px">
+            <label class="lbl">Contato</label>
+            <input id="ac-${a.id}" value="${esc(a.contact||'')}" placeholder="Nome do responsável" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:260px;flex-basis:100%">
+            <label class="lbl">Observações</label>
+            <textarea id="an-${a.id}" style="width:100%;min-height:50px">${esc(a.notes||'')}</textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:9px">
+          <button class="btn sm" onclick="saveAdvertiser('${a.id}')">Salvar</button>
+          <button class="btn ghost sm" onclick="renewAdvertiser('${a.id}')">Renovar +${a.term_days}d</button>
+          <button class="btn ghost sm" onclick="toggleAdvertiser('${a.id}',${a.active?0:1})">${a.active?'Suspender':'Reativar'}</button>
+        </div>
+      </div>
+    </div>`).join('') : `<div class="empty"><div class="lbl">Nenhum anunciante cadastrado</div>
+      Cadastre acima quem paga para aparecer nas suas telas — o painel calcula vencimento, receita mensal e fechamentos automaticamente.</div>`)
+    +`</div></div>`;
+}
+function createAdvertiser(){
+  const name=$('#naname').value.trim(), value=$('#navalue').value, term_days=$('#naterm').value, whatsapp=$('#nawa').value.trim();
+  if(!name||!value) return toast('Informe nome e valor','err');
+  api('/advertisers',{method:'POST',body:{name,value:Number(value),term_days:Number(term_days)||30,whatsapp}})
+    .then(()=>{toast('Anunciante cadastrado','ok');loadAdvertisers()}).catch(e=>toast(e.message,'err'));
+}
+function saveAdvertiser(id){
+  const body = {
+    value: Number($('#av-'+id).value),
+    term_days: Number($('#at-'+id).value),
+    due_date: $('#ad-'+id).value,
+    whatsapp: $('#aw-'+id).value.trim(),
+    contact: $('#ac-'+id).value.trim(),
+    notes: $('#an-'+id).value.trim()
+  };
+  api('/advertisers/'+id,{method:'PUT',body})
+    .then(()=>{toast('Anunciante atualizado','ok');loadAdvertisers()}).catch(e=>toast(e.message,'err'));
+}
+const renewAdvertiser = id => api('/advertisers/'+id+'/renew',{method:'POST'})
+  .then(()=>{toast('Contrato renovado','ok');loadAdvertisers()}).catch(e=>toast(e.message,'err'));
+const toggleAdvertiser = (id,active) => api('/advertisers/'+id,{method:'PUT',body:{active:!!active}})
+  .then(()=>{toast('Anunciante atualizado','ok');loadAdvertisers()}).catch(e=>toast(e.message,'err'));
+const delAdvertiser = (id,name) => confirm('Excluir o anunciante '+name+'?') && api('/advertisers/'+id,{method:'DELETE'})
+  .then(()=>{toast('Anunciante excluído');loadAdvertisers()}).catch(e=>toast(e.message,'err'));
+
+/* ---------- WhatsApp com modelos prontos (Anunciantes) ---------- */
+let waAdv = null;
+function openWa(id){
+  waAdv = (window._advs_||[]).find(a=>a.id===id); if(!waAdv || !waAdv.whatsapp) return;
+  $('#waName').textContent = waAdv.name;
+  const stageLabels = {pre_due:'Lembrete',due:'Vence hoje',overdue:'Vencido'};
+  const order = ['pre_due','due','overdue'];
+  $('#waTpl').innerHTML = order.map(k=>
+    `<button data-k="${k}" class="${k===(waAdv.stage==='ok'?'pre_due':waAdv.stage)?'active':''}" onclick="waPick('${k}')">${stageLabels[k]}</button>`).join('');
+  waPick(waAdv.stage==='ok' ? 'pre_due' : waAdv.stage);
+  $('#waModal').classList.add('on');
+}
+function waPick(k){
+  document.querySelectorAll('#waTpl button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
+  $('#waText').value = waAdv.templates[k];
+}
+const closeWa = () => $('#waModal')?.classList.remove('on');
+function sendWa(){
+  const text = $('#waText').value.trim();
+  if(!text || !waAdv) return;
+  api('/advertisers/'+waAdv.id+'/notify',{method:'POST',body:{text}})
+    .then(r=>{
+      toast(r.ok ? 'Mensagem enviada pelo WhatsApp' : 'Não enviou: '+(r.error||'erro desconhecido'), r.ok?'ok':'err');
+      if(r.ok) closeWa();
+    })
+    .catch(e=>toast(e.message,'err'));
+}
 
 /* ================= EDITOR DE LAYOUT ================= */
 let lmDev=null, lmLays=[];
@@ -1771,7 +2029,7 @@ function saveLayout(){
     .catch(e=>toast(e.message,'err'));
 }
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeLayout(); closeAssign() } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeLayout(); closeAssign(); closeWa(); closePw() } });
 if(token) boot();
 </script>
 </body>
