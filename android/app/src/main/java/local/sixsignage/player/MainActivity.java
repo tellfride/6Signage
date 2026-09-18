@@ -32,7 +32,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 
 /**
- * 6Signage Player para Android TV.
+ * VitriniON Player para Android TV.
  * Player em WebView (mesma lógica do cliente Windows) + ponte nativa para
  * configuração persistente e cache de mídia em disco com validação SHA-256.
  * BACK no controle remoto abre a tela de configuração.
@@ -259,7 +259,7 @@ public class MainActivity extends Activity {
                 int n = in.read(buf);
                 in.close();
                 String body = new String(buf, 0, Math.max(n, 0));
-                boolean ok = c.getResponseCode() == 200 && body.contains("6signage");
+                boolean ok = c.getResponseCode() == 200 && body.contains("vitrinion");
                 return "{\"ok\":" + ok + "}";
             } catch (Exception e) {
                 return "{\"ok\":false}";

@@ -134,11 +134,86 @@ CREATE TABLE IF NOT EXISTS layouts (
 );
 `);
 
+// Faixas de rodapé, sidebars e layouts são referenciados acima; companies é
+// referenciada pelas colunas company_id abaixo — precisa existir antes delas.
+db.exec(`
+CREATE TABLE IF NOT EXISTS companies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`);
+
 // Migração: colunas de layout/overlays por dispositivo
 function ensureColumn(table, col, def) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   if (!cols.some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
+// v1.4: bloqueio de conta por tentativas erradas (3 erros / 3 min)
+ensureColumn('users', 'failed_attempts', 'INTEGER DEFAULT 0');
+ensureColumn('users', 'locked_until', 'TEXT');
+ensureColumn('users', 'last_failed_at', 'TEXT');
+
+// v1.4: papel super_admin — SQLite não permite alterar um CHECK existente,
+// então a tabela precisa ser recriada (uma única vez, idempotente).
+{
+  const usersDef = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`).get();
+  if (usersDef && !usersDef.sql.includes('super_admin')) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    try {
+      db.exec(`
+        CREATE TABLE users_new (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin','admin','manager','viewer')),
+          created_at TEXT DEFAULT (datetime('now')),
+          failed_attempts INTEGER DEFAULT 0,
+          locked_until TEXT,
+          last_failed_at TEXT
+        );
+        INSERT INTO users_new (id, email, password_hash, role, created_at, failed_attempts, locked_until, last_failed_at)
+          SELECT id, email, password_hash, role, created_at, failed_attempts, locked_until, last_failed_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+// v1.4: multi-tenancy — cada empresa isolada; company_id nullable em devices
+// (tela pendente de aprovação ainda não pertence a ninguém).
+ensureColumn('users', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('device_groups', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('devices', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE SET NULL');
+ensureColumn('media', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('playlists', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('tickers', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('sidebars', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+ensureColumn('layouts', 'company_id', 'TEXT REFERENCES companies(id) ON DELETE CASCADE');
+
+// v1.5: assinatura por empresa — vencimento, limite de telas, aviso por WhatsApp.
+// due_date NULL = nunca vence (mantém empresas já existentes sem vencimento até
+// o super_admin definir uma data manualmente).
+ensureColumn('companies', 'due_date', 'TEXT');
+ensureColumn('companies', 'screen_limit', 'INTEGER');
+ensureColumn('companies', 'whatsapp', 'TEXT');
+ensureColumn('companies', 'last_reminder_stage', 'TEXT');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS notifications_log (
+  id TEXT PRIMARY KEY,
+  company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+  channel TEXT, kind TEXT, success INTEGER, detail TEXT,
+  sent_at TEXT DEFAULT (datetime('now'))
+);
+`);
+
 // legado (v0.3): configuração de clima/rodapé direto no dispositivo
 ensureColumn('devices', 'weather_enabled', 'INTEGER DEFAULT 0');
 ensureColumn('devices', 'weather_location', 'TEXT');
@@ -179,5 +254,19 @@ for (const d of legacy) {
   db.prepare('UPDATE devices SET weather_enabled = 0, ticker_enabled = 0 WHERE id = ?').run(d.id);
 }
 if (legacy.length) console.log(`[migração] ${legacy.length} tela(s) convertida(s) para perfis reutilizáveis`);
+
+// Backfill: tudo que já existia antes do multi-tenancy (inclusive linhas criadas
+// pela conversão de legado acima) vira "Empresa Padrão". Id fixo, não uuid
+// aleatório — a checagem abaixo é idempotente entre reinícios.
+const DEFAULT_COMPANY_ID = 'default-company';
+if (!db.prepare('SELECT id FROM companies WHERE id = ?').get(DEFAULT_COMPANY_ID)) {
+  db.prepare('INSERT INTO companies (id, name, slug) VALUES (?,?,?)')
+    .run(DEFAULT_COMPANY_ID, 'Empresa Padrão', 'default');
+}
+for (const t of ['users', 'device_groups', 'devices', 'media', 'playlists', 'tickers', 'sidebars', 'layouts']) {
+  // super_admin (role) fica de fora do backfill: não pertence a nenhuma empresa
+  const where = t === 'users' ? `WHERE company_id IS NULL AND role != 'super_admin'` : 'WHERE company_id IS NULL';
+  db.prepare(`UPDATE ${t} SET company_id = ? ${where}`).run(DEFAULT_COMPANY_ID);
+}
 
 module.exports = db;

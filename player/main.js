@@ -1,4 +1,4 @@
-// 6Signage Player — processo principal do Electron
+// VitriniON Player — processo principal do Electron
 // 1ª execução: abre o assistente de configuração (servidor + nome da tela).
 // Execuções seguintes: abre direto o player em modo kiosk fullscreen.
 // Atalhos: Ctrl+Shift+S = reconfigurar · Ctrl+Shift+Q = sair
@@ -54,7 +54,7 @@ ipcMain.handle('test-server', async (ev, url) => {
   try {
     const r = await fetch(url.replace(/\/+$/, '') + '/api/health', { signal: AbortSignal.timeout(5000) });
     const j = await r.json();
-    return { ok: r.ok && j.app === '6signage', version: j.version || null };
+    return { ok: r.ok && j.app === 'vitrinion', version: j.version || null };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -143,11 +143,12 @@ async function applyUpdate(info) {
 
   const target = path.join(process.resourcesPath, 'app.asar');
   const exe = process.execPath;
+  const exeName = path.basename(exe); // resolvido em runtime — não amarra a um nome de build fixo
   const bat = path.join(updDir, 'apply-update.bat');
   fs.writeFileSync(bat,
     '@echo off\r\n' +
     ':wait\r\n' +
-    'tasklist /fi "imagename eq 6signage-player.exe" 2>nul | find /i "6signage-player.exe" >nul\r\n' +
+    `tasklist /fi "imagename eq ${exeName}" 2>nul | find /i "${exeName}" >nul\r\n` +
     'if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n' +
     `copy /y "${newAsar}" "${target}" >nul\r\n` +
     `start "" "${exe}"\r\n` +

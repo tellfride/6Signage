@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#0A0D12" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#F1F4F8" media="(prefers-color-scheme: light)">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='26' height='17' rx='3' fill='none' stroke='%234C8DFF' stroke-width='2.5'/%3E%3Cpath d='M11 27h10' stroke='%234C8DFF' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='18' r='2.5' fill='%232FD07E'/%3E%3C/svg%3E">
-<title>6Signage — Console</title>
+<title>VitriniON — Console</title>
 <style>
 /* ============================================================
-   6Signage — console de operação de telas
+   VitriniON — console de operação de telas
    Vocabulário: sala de controle. Tally light indica o estado,
    monospace carrega dado de máquina, cor saturada só no "no ar".
    Sem webfonts: precisa funcionar em rede fechada, sem internet.
@@ -58,18 +58,140 @@ h3{font-size:15.5px;font-weight:650}
 .logo::after{content:'';position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);width:10px;height:2px;background:var(--text)}
 .logo i{position:absolute;right:2.5px;bottom:2.5px;width:4px;height:4px;border-radius:50%;background:var(--live)}
 
-/* ---- login ---- */
-#login{max-width:368px;margin:0 auto;padding:16vh 20px 0;display:flex;flex-direction:column;gap:12px}
-#login::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:radial-gradient(640px 300px at 50% 10%, var(--act-bg), transparent 70%),
-             repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.008) 3px 4px)}
-html[data-theme="light"] #login::before{
-  background:radial-gradient(640px 300px at 50% 10%, var(--act-bg), transparent 70%)}
-#login .brand{justify-content:center;font-size:19px;margin-bottom:2px}
-#login .lbl{text-align:center;margin-bottom:22px}
-#login input{background:var(--panel);border:1px solid var(--line);padding:12px 14px;border-radius:var(--r);width:100%}
-#login input:focus{border-color:var(--act);outline:none;box-shadow:0 0 0 3px var(--act-bg)}
-#lerr{font-family:var(--mono);font-size:12px;color:var(--dead);min-height:17px;text-align:center}
+/* ---- login (marca VitriniON — sempre escuro, independente do tema do painel) ----
+   Fundo: foto real de vitrine (server/public/assets/login-bg.jpg) com véu escuro
+   para contraste; se o arquivo não existir, o gradiente abaixo cobre sozinho. */
+#login{
+  --lg-blue:#079CFF; --lg-blue-2:#00C8FF; --lg-blue-3:#0B47B8;
+  --lg-txt:#FFFFFF; --lg-mut:#A9BDD8; --lg-line:rgba(54,157,255,.45);
+  /* a tela de acesso é sempre escura (identidade da marca), mesmo com o painel no tema claro */
+  --ink:#020B18; --panel:#0A1F39; --well:#061428; --line:rgba(54,157,255,.45);
+  --text:#FFFFFF; --muted:#A9BDD8; --faint:#7D93B3; --act:#079CFF; --act-bg:rgba(7,156,255,.16); --act-fg:#8FD4FF;
+  height:100vh;position:relative;overflow-x:hidden;overflow-y:auto;
+  display:flex;flex-direction:column;
+  background:
+    linear-gradient(rgba(1,8,19,.62), rgba(1,8,19,.74)),
+    url('assets/login-bg.jpg') center/cover no-repeat,
+    linear-gradient(160deg, #051325 0%, #020B18 55%, #04101F 100%);
+  color:var(--lg-txt);font-size:15px
+}
+/* feixes de luz nos cantos opostos + halo azul ambiente atrás do cartão.
+   Sem totem lateral: a própria foto de fundo já mostra o produto — um mockup
+   CSS preso à esquerda deixava o conjunto assimétrico (cartão centralizado
+   competindo com uma massa visual só de um lado). O cartão é o único foco agora. */
+#login .beam{position:absolute;width:300px;height:75px;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,#0757D8,#00AAFF);opacity:.65;transform:rotate(-43deg)}
+#login .beam-a{top:-65px;left:-95px}
+#login .beam-b{right:-95px;bottom:-65px}
+#login .glow{position:absolute;z-index:0;pointer-events:none;border-radius:50%;filter:blur(80px);opacity:.2}
+#login .glow-a{width:400px;height:400px;background:#007CFF;left:-180px;top:30%}
+#login .glow-b{width:360px;height:360px;background:#00CFFF;right:-160px;top:15%}
+#login .glow-c{width:480px;height:320px;background:var(--lg-blue-3);left:50%;top:50%;
+  transform:translate(-50%,-50%);opacity:.14}
+
+/* coluna única centrada: a marca apresenta, o cartão resolve, as capacidades confirmam.
+   height:100% (não min-height) + itens comprimidos por clamp() para caber sem rolar
+   nas alturas reais de laptop (~800px); overflow:auto no pai fica como rede de
+   segurança, não como comportamento esperado. */
+#login .login-inner{position:relative;z-index:1;flex:1 0 auto;width:100%;max-width:520px;margin:0 auto;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:clamp(20px,4vh,44px) 24px;text-align:center}
+#login .login-copy{max-width:520px;display:flex;flex-direction:column;align-items:center}
+/* lockup da marca: "Vitrini" + O com play + N */
+#login .brand-lockup{display:flex;align-items:center;font-weight:800;
+  letter-spacing:-.025em;line-height:1;font-size:clamp(26px,3.4vw,38px)}
+#login .login-copy .brand-lockup{justify-content:center} /* só o lockup do topo é centrado */
+#login .bl-w{color:var(--lg-txt)}
+#login .bl-b{color:var(--lg-blue);display:inline-flex;align-items:center}
+#login .bl-o{width:.84em;height:.84em;margin:0 -.015em}
+#login .tagline{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.55em;
+  margin:9px 0 clamp(12px,2vh,18px);font-size:clamp(12px,1.05vw,14.5px);color:#DCE6F5;font-weight:500}
+#login .tagline i{width:4px;height:4px;border-radius:50%;background:var(--lg-blue);display:inline-block}
+#login .login-copy h1{font-size:clamp(18px,1.9vw,23px);font-weight:800;letter-spacing:-.02em;line-height:1.16;
+  margin:0 0 clamp(16px,2.6vh,24px)}
+#login .hl-2{position:relative;display:inline-block;color:var(--lg-blue);font-size:1.14em;line-height:1.16}
+#login .swoosh{position:absolute;left:-2%;right:-6%;bottom:-.34em;width:108%;height:.30em;color:var(--lg-blue)}
+
+/* cartão de acesso — foco único da tela */
+#login .login-card{width:min(380px,100%);display:flex;flex-direction:column;gap:11px;text-align:left;
+  padding:clamp(20px,2.2vw,28px) clamp(20px,2.2vw,26px);border-radius:20px;
+  background:linear-gradient(145deg, rgba(9,31,57,.88), rgba(2,15,30,.82));
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid var(--lg-line);
+  box-shadow:0 25px 80px rgba(0,0,0,.45), inset 0 0 35px rgba(0,150,255,.05)}
+/* o <form> precisa repetir o flex-column do cartão: um <form> em bloco faria o
+   botão (inline-block por padrão) encolher para o conteúdo em vez de esticar */
+#login #loginForm{display:flex;flex-direction:column;gap:11px}
+#login .card-icon{width:32px;height:32px;color:var(--lg-txt);margin-bottom:2px}
+#login .card-title{font-size:17px;font-weight:800;letter-spacing:-.015em;line-height:1.18}
+#login .card-title .brand-lockup{font-size:19px;margin-top:1px}
+#login .fld{position:relative}
+#login .fld .fi{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;
+  color:#8FA3BF;pointer-events:none}
+#login .fld input{width:100%;height:46px;padding:0 46px 0 42px;border-radius:11px;font-size:14.5px;
+  background:rgba(8,31,57,.78);border:1px solid var(--lg-line);color:var(--lg-txt)}
+#login .fld input::placeholder{color:#8FA3BF}
+#login .fld input:focus{outline:none;border-color:var(--lg-blue);box-shadow:0 0 0 3px rgba(7,156,255,.16)}
+/* right precisa passar do raio da borda (11px) — senão o ícone cai em cima da
+   curva do canto em vez da parte reta, e parece "escapar" do campo */
+#login .pass-toggle{position:absolute;right:13px;top:50%;transform:translateY(-50%);background:transparent;border:0;
+  width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;color:#8FA3BF;cursor:pointer}
+#login .pass-toggle:hover{color:var(--lg-txt)}
+#login .pass-toggle svg{width:18px;height:18px}
+#login .btn-login{height:46px;margin-top:4px;border:0;border-radius:11px;cursor:pointer;
+  color:#fff;font-size:15px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:9px;
+  background:linear-gradient(100deg,var(--lg-blue) 0%,var(--lg-blue-2) 100%);
+  box-shadow:0 10px 30px rgba(7,156,255,.30);transition:transform .18s, box-shadow .18s}
+#login .btn-login:hover{transform:translateY(-2px);box-shadow:0 14px 35px rgba(7,156,255,.42)}
+#login .btn-login svg{width:17px;height:17px}
+#login .forgot{display:block;background:transparent;border:0;color:#A9C8E8;font-size:12.5px;
+  text-align:left;cursor:pointer;padding:1px 0;width:100%}
+#login .forgot:hover{color:var(--lg-blue-2)}
+
+/* as capacidades confirmam a escolha depois do login, então vêm abaixo do cartão */
+#login .feature-row{display:flex;justify-content:center;width:100%;max-width:440px;
+  margin:clamp(16px,2.6vh,26px) 0 0}
+#login .feature-row li{list-style:none;flex:1;display:flex;flex-direction:column;align-items:center;
+  text-align:center;gap:5px;padding:0 12px;border-right:1px solid rgba(130,170,210,.28)}
+#login .feature-row li:last-child{border-right:0}
+#login .feature-row svg{width:19px;height:19px;color:var(--lg-blue)}
+#login .feature-row b{display:block;font-size:11.5px;font-weight:700;color:var(--lg-txt);line-height:1.25}
+#login .feature-row span{display:block;font-size:10px;color:var(--lg-mut);line-height:1.3;margin-top:1px}
+
+#login .hero-foot{position:absolute;left:clamp(18px,3vw,32px);bottom:clamp(52px,7vh,64px);z-index:1;
+  display:flex;align-items:center;gap:11px;text-align:left;
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:#C3CFE2;line-height:1.7}
+#login .hf-bar{width:3px;align-self:stretch;border-radius:3px;background:var(--lg-blue)}
+
+#login .login-foot{position:relative;z-index:2;flex:0 0 auto;display:flex;flex-wrap:wrap;
+  align-items:center;justify-content:center;gap:6px 14px;padding:12px 20px;text-align:center;
+  font-size:12px;color:rgba(255,255,255,.60)}
+#login .login-foot b{color:rgba(255,255,255,.86);font-weight:650}
+#login .login-foot .sep{opacity:.35}
+#login .login-foot .wa{display:inline-flex;align-items:center;gap:6px;color:rgba(255,255,255,.78);
+  text-decoration:none;border:1px solid rgba(37,211,102,.30);border-radius:999px;padding:3px 11px;
+  background:rgba(37,211,102,.08);transition:border-color .15s, background .15s, color .15s}
+#login .login-foot .wa:hover{color:#fff;border-color:rgba(37,211,102,.65);background:rgba(37,211,102,.16)}
+#login .login-foot .wa svg{width:14px;height:14px;color:#25D366;flex:0 0 auto}
+#lerr{font-size:12px;color:#FF7B7B;min-height:15px}
+#login #lerr:empty{display:none} /* sem erro, sem espaço morto no pé do cartão */
+#turnstileBox:not(:empty){margin:1px 0}
+/* telas realmente baixas (notebook em janela pequena): a headline sai primeiro,
+   depois as capacidades — o cartão de login nunca é a coisa que desaparece */
+@media (max-height:700px){ #login .hero-foot{display:none} }
+@media (max-height:660px){ #login .login-copy h1{display:none} }
+@media (max-height:560px){ #login .feature-row{display:none} }
+@media (max-width:900px){
+  #login .hero-foot{display:none}
+  #login .login-inner{height:auto;min-height:100%;justify-content:flex-start;padding:34px 22px 18px}
+  #login .feature-row li{padding:0 8px}
+  #login .login-foot{position:static;padding:18px 20px 22px;flex-direction:column;gap:6px}
+  #login .login-foot .sep{display:none}
+}
+@media (max-width:460px){
+  #login .feature-row{max-width:260px;flex-wrap:wrap;row-gap:14px}
+  #login .feature-row li{flex:0 0 50%;border-right:0}
+}
 
 /* ---- casca ---- */
 #app{display:none}
@@ -89,6 +211,13 @@ main{padding:24px clamp(14px,3vw,36px) 92px;max-width:1240px;width:100%}
 #topbar{display:none}
 .head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .head h2{margin-right:auto}
+
+/* ---- aviso de vencimento ---- */
+#dueBanner:empty{display:none}
+.duebar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:16px;
+  border-radius:var(--r);font-size:13px;background:var(--wait-bg);color:var(--wait);border:1px solid var(--wait)}
+.duebar.dead{background:var(--dead-bg);color:var(--dead);border-color:var(--dead)}
+.duebar b{font-weight:700}
 
 /* ---- controles ---- */
 .btn{background:var(--act);color:#fff;border:0;padding:9px 15px;border-radius:8px;font-size:13.5px;
@@ -388,20 +517,94 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
 <body>
 
 <div id="login">
-  <div class="brand"><span class="logo"><i></i></span>6Signage</div>
-  <div class="lbl">Console de telas</div>
-  <input id="lemail" type="email" placeholder="E-mail" autocomplete="username">
-  <input id="lpass" type="password" placeholder="Senha" autocomplete="current-password">
-  <button class="btn" style="justify-content:center;padding:12px" onclick="login()">Entrar</button>
-  <div id="lerr"></div>
+  <span class="beam beam-a"></span><span class="beam beam-b"></span>
+  <span class="glow glow-a"></span><span class="glow glow-b"></span><span class="glow glow-c"></span>
+
+  <div class="login-inner">
+      <div class="login-copy">
+        <div class="brand-lockup"><span class="bl-w">Vitrini</span><span class="bl-b">
+          <svg class="bl-o" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" stroke-width="7"/>
+            <path d="M16.5 13.2 29 20l-12.5 6.8z" fill="#fff"/>
+          </svg>N</span></div>
+        <div class="tagline">Vitrine Digital <i></i> Comunicação <i></i> Resultados</div>
+        <h1>O seu negócio<br><span class="hl-2">começa aqui!
+          <svg class="swoosh" viewBox="0 0 320 20" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M6 13C78 4 214 3 312 8" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+            <path d="M34 19C120 13 236 12 300 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity=".7"/>
+          </svg></span></h1>
+      </div>
+
+      <div class="login-card">
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10.2" cy="7.2" r="3.9"/><path d="M3.2 20.4c0-3.9 3.1-6.3 7-6.3h.9"/>
+        <rect x="13.6" y="14.1" width="8.2" height="6.6" rx="1.5"/><path d="M15.6 14.1v-1.6a2.1 2.1 0 0 1 4.2 0v1.6"/>
+      </svg>
+      <div class="card-title">Acesse o seu
+        <div class="brand-lockup"><span class="bl-w">Vitrini</span><span class="bl-b">
+          <svg class="bl-o" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" stroke-width="7"/>
+            <path d="M16.5 13.2 29 20l-12.5 6.8z" fill="#fff"/>
+          </svg>N</span></div>
+      </div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); login(); return false;">
+        <div class="fld">
+          <svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.2c0-3.7 3.3-5.8 7.5-5.8s7.5 2.1 7.5 5.8"/></svg>
+          <input id="lemail" type="email" placeholder="Usuário" aria-label="Usuário" autocomplete="username">
+        </div>
+        <div class="fld">
+          <svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="10.2" width="15.6" height="10.6" rx="2.2"/><path d="M8 10.2V7.6a4 4 0 0 1 8 0v2.6"/></svg>
+          <input id="lpass" type="password" placeholder="Senha" aria-label="Senha" autocomplete="current-password">
+          <button type="button" class="pass-toggle" id="btnTogglePass" aria-label="Mostrar senha">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+
+        <div id="turnstileBox"></div>
+
+        <button class="btn-login" type="submit">Entrar
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12.5 6l6 6-6 6"/></svg>
+        </button>
+        <button type="button" class="forgot" onclick="toast('Peça a um administrador para redefinir sua senha')">Esqueceu sua senha?</button>
+        <div id="lerr"></div>
+      </form>
+      </div>
+
+      <ul class="feature-row">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="2" y="4" width="20" height="13.5" rx="2"/><path d="M8.5 21h7M12 17.5V21"/><path d="M10.5 8.2 14.8 10.8l-4.3 2.6z" fill="currentColor" stroke="none"/></svg>
+            <div><b>Displays</b><span>que atraem</span></div></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="3.5" width="19" height="17" rx="2.4"/><circle cx="8.4" cy="9.2" r="1.7"/><path d="M3 17.5 9 12l5 4.2 3-2.4 4 3.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><b>Conteúdo</b><span>que comunica</span></div></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5V6.2c0-1-.8-1.7-1.7-1.7H4.7c-1 0-1.7.8-1.7 1.7v12.6c0 1 .8 1.7 1.7 1.7h6.6"/><path d="M3 9.4h18M7.8 2.6v3.6M16.2 2.6v3.6"/><circle cx="17.4" cy="17.4" r="4.4"/><path d="M17.4 15.3v2.3l1.5 1"/></svg>
+            <div><b>Agendamento</b><span>com facilidade</span></div></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20.5V13M10 20.5V7.5M16 20.5V10.5M22 20.5V3.5"/></svg>
+            <div><b>Resultados</b><span>que importam</span></div></li>
+      </ul>
+  </div>
+
+  <div class="hero-foot"><span class="hf-bar"></span>
+    <span>Soluções inteligentes<br>para o seu ponto de venda</span></div>
+
+  <footer class="login-foot">
+    <span>Versão <span id="lgVer">1.3.1</span></span>
+    <span class="sep">·</span>
+    <span>Desenvolvido por <b>T-Labex Tecnologia</b></span>
+    <a class="wa" href="https://wa.me/5521980155573" target="_blank" rel="noopener noreferrer"
+       aria-label="Falar com a T-Labex Tecnologia no WhatsApp">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 18.13h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.25-4.36c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.69 8.23-8.23 8.23m4.52-6.17c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.06s.89 2.39 1.01 2.56c.12.16 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.67-1.18.21-.58.21-1.08.15-1.18-.06-.11-.22-.17-.47-.29"/></svg>
+      21 98015-5573
+    </a>
+  </footer>
 </div>
 
 <div id="app">
   <aside>
-    <div class="brand"><span class="logo"><i></i></span>6Signage</div>
+    <div class="brand"><span class="logo"><i></i></span>VitriniON</div>
     <nav id="sidenav"></nav>
     <div class="who">
       <b id="uemail"></b><span class="lbl" id="urole"></span>
+      <div id="companySwitcher"></div>
       <div class="row" style="gap:7px">
         <button class="ico theme" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema"></button>
         <button class="btn ghost sm" style="flex:1;justify-content:center" onclick="logout()">Sair</button>
@@ -410,19 +613,21 @@ textarea{width:100%;resize:vertical;min-height:76px;line-height:1.5}
   </aside>
   <div>
     <div id="topbar">
-      <div class="brand"><span class="logo"><i></i></span>6Signage</div>
+      <div class="brand"><span class="logo"><i></i></span>VitriniON</div>
       <div class="row" style="gap:7px">
         <button class="ico theme" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema"></button>
         <button class="btn ghost sm" onclick="logout()">Sair</button>
       </div>
     </div>
     <main>
+      <div id="dueBanner"></div>
       <section id="tab-devices"></section>
       <section id="tab-playlists" class="hidden"></section>
       <section id="tab-media" class="hidden"></section>
       <section id="tab-groups" class="hidden"></section>
       <section id="tab-users" class="hidden"></section>
-      <footer class="verfoot"><span>6SIGNAGE</span><i></i><span class="mono" id="verTag">···</span></footer>
+      <section id="tab-companies" class="hidden"></section>
+      <footer class="verfoot"><span>VITRINION</span><i></i><span class="mono" id="verTag">···</span></footer>
     </main>
   </div>
 </div>
@@ -535,7 +740,7 @@ function bgStyle(mode, color, image){
   if (mode==='image' && image) return `background:linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.55)),url('${esc(image)}') center/cover !important`;
   return '';
 }
-const ROLE = {admin:'Administrador', manager:'Editor', viewer:'Visualizador'};
+const ROLE = {super_admin:'Super Admin', admin:'Administrador', manager:'Editor', viewer:'Visualizador'};
 
 const I = {
   devices:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
@@ -563,7 +768,8 @@ const I = {
   scrLandscape:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2.2"/></svg>',
   scrPortrait:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2.2"/></svg>',
   grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.3"/><rect x="13" y="3" width="8" height="8" rx="1.3"/><rect x="3" y="13" width="8" height="8" rx="1.3"/><rect x="13" y="13" width="8" height="8" rx="1.3"/></svg>',
-  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.2" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>'
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.2" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.2" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  companies:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 21V7l7-4v18M3 21h18M10 21V7l7 4v10"/><path d="M6.5 11h0M6.5 15h0M13.5 12h0M13.5 16h0"/></svg>'
 };
 const orientIcon = d => I[d.orientation==='portrait'?'scrPortrait':'scrLandscape'];
 
@@ -587,6 +793,8 @@ function toast(msg, kind=''){
 
 async function api(path, opts={}){
   opts.headers = Object.assign({'Authorization':'Bearer '+token}, opts.headers||{});
+  const activeCompany = localStorage.getItem('activeCompany');
+  if (activeCompany && userRole()==='super_admin') opts.headers['X-Company-Id'] = activeCompany;
   if (opts.body && !(opts.body instanceof FormData)){
     opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.body);
   }
@@ -596,25 +804,56 @@ async function api(path, opts={}){
   return r.json();
 }
 
+/* ---------- captcha (Cloudflare Turnstile) ---------- */
+let turnstileRequired = false, turnstileWidgetId = null;
+fetch('/api/config').then(r=>r.json()).then(cfg=>{
+  if (cfg.version) $('#lgVer').textContent = cfg.version;
+  if (!cfg.turnstileSiteKey) return;
+  turnstileRequired = true;
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+  s.async = true;
+  s.onload = () => {
+    turnstileWidgetId = turnstile.render('#turnstileBox', {
+      sitekey: cfg.turnstileSiteKey,
+      theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
+    });
+  };
+  document.head.appendChild(s);
+}).catch(()=>{});
+
+$('#btnTogglePass').onclick = () => {
+  const inp = $('#lpass');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+};
+
 /* ---------- sessão ---------- */
 async function login(){
   $('#lerr').textContent='';
+  const captcha_token = (window.turnstile && turnstileWidgetId!=null) ? turnstile.getResponse(turnstileWidgetId) : null;
+  if (turnstileRequired && !captcha_token){ $('#lerr').textContent='Confirme a verificação de segurança.'; return }
   try{
     const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:$('#lemail').value,password:$('#lpass').value})});
-    if(!r.ok){ $('#lerr').textContent='E-mail ou senha incorretos'; return }
-    const j = await r.json();
+      body:JSON.stringify({email:$('#lemail').value,password:$('#lpass').value,captcha_token})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){
+      $('#lerr').textContent = j.error || 'E-mail ou senha incorretos';
+      if (window.turnstile && turnstileWidgetId!=null) turnstile.reset(turnstileWidgetId);
+      return;
+    }
     token=j.token; localStorage.setItem('token',token); localStorage.setItem('email',j.user.email);
     boot();
   }catch(e){ $('#lerr').textContent=e.message }
 }
 function logout(){ localStorage.removeItem('token'); token=null; location.reload() }
-$('#lpass').addEventListener('keydown',e=>{ if(e.key==='Enter') login() });
+/* Enter em qualquer campo já submete via <form id="loginForm"> */
 
 function navHtml(){
+  const role = userRole();
   const tabs=[['devices','Telas'],['playlists','Playlists'],['media','Mídia'],['groups','Grupos']];
-  if(userRole()==='admin') tabs.push(['users','Usuários']);
-  return tabs.map(([id,l])=>`<button data-tab="${id}" onclick="tab('${id}')">${I[id]}<span>${l}</span></button>`).join('');
+  if(role==='admin' || role==='super_admin') tabs.push(['users','Usuários']);
+  if(role==='super_admin') tabs.push(['companies','Empresas']);
+  return tabs.map(([id,l])=>`<button data-tab="${id}" onclick="tab('${id}')">${I[id]||I.devices}<span>${l}</span></button>`).join('');
 }
 function boot(){
   $('#login').classList.add('hidden');
@@ -624,15 +863,44 @@ function boot(){
   $('#sidenav').innerHTML = navHtml();
   $('#tabbar').innerHTML = navHtml();
   applyTheme(document.documentElement.dataset.theme);
+  if (userRole()==='super_admin') renderCompanySwitcher(); else { $('#companySwitcher').innerHTML=''; renderDueBanner(); }
   tab('devices');
   setInterval(()=>{ if(!$('#tab-devices').classList.contains('hidden')) loadDevices(true) }, 15000);
   fetch('/api/health').then(r=>r.json()).then(j=>{ $('#verTag').textContent = 'v'+j.version }).catch(()=>{});
+}
+function renderDueBanner(){
+  api('/company').then(c=>{
+    if(!c || !c.due_date){ $('#dueBanner').innerHTML=''; return; }
+    const days = Math.round((new Date(c.due_date+'T00:00:00Z')-new Date(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+    if(days>7){ $('#dueBanner').innerHTML=''; return; }
+    const msg = days<0 ? `Assinatura vencida há ${-days} dia(s).`
+      : days===0 ? `Assinatura vence hoje.`
+      : `Assinatura vence em ${days} dia(s).`;
+    $('#dueBanner').innerHTML = `<div class="duebar${days<0?' dead':''}">⚠ <b>${msg}</b> Entre em contato com o suporte para renovar.</div>`;
+  }).catch(()=>{});
+}
+function renderCompanySwitcher(){
+  api('/companies').then(list=>{
+    window._companies_ = list;
+    const active = localStorage.getItem('activeCompany')||'';
+    $('#companySwitcher').innerHTML =
+      `<label class="lbl" style="display:block;margin:9px 0 5px">Empresa ativa</label>
+      <select id="companyPick" style="width:100%;background:var(--well);border:1px solid var(--line);
+        color:inherit;padding:7px 9px;border-radius:8px;font-size:12.5px">
+        <option value="">Todas (somente leitura)</option>
+        ${list.map(c=>`<option value="${c.id}" ${c.id===active?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>`;
+    $('#companyPick').onchange = e => {
+      localStorage.setItem('activeCompany', e.target.value);
+      tab(document.querySelector('[data-tab].active')?.dataset.tab || 'devices');
+    };
+  }).catch(()=>{});
 }
 function tab(name){
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
   $('#tab-'+name).classList.remove('hidden');
-  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups,users:loadUsers})[name]();
+  ({devices:loadDevices,playlists:loadPlaylists,media:loadMedia,groups:loadGroups,users:loadUsers,companies:loadCompanies})[name]();
 }
 
 /* ================= TELAS — grade (video wall) ou lista ================= */
@@ -1245,6 +1513,8 @@ const assignGr = (pl,g) => pl && api('/playlists/'+pl+'/assign',{method:'POST',b
 /* ================= USUÁRIOS ================= */
 async function loadUsers(){
   const [users,grps] = await Promise.all([api('/users'),api('/groups')]);
+  const isSuper = userRole()==='super_admin';
+  const roleOpts = isSuper ? ['manager','viewer','admin','super_admin'] : ['manager','viewer','admin'];
   const checks = (cls,sel=[]) => grps.length
     ? `<div class="checks">${grps.map(g=>`<label class="ck"><input type="checkbox" class="${cls}" value="${g.id}"
         ${sel.includes(g.id)?'checked':''}>${esc(g.name)}</label>`).join('')}</div>`
@@ -1259,22 +1529,27 @@ async function loadUsers(){
           <option value="manager">Editor</option>
           <option value="viewer">Visualizador</option>
           <option value="admin">Administrador</option>
+          ${isSuper?'<option value="super_admin">Super Admin</option>':''}
         </select>
         <button class="btn" onclick="createUser()">Criar conta</button>
       </div>
       <div id="nugroups"><div class="lbl" style="margin:13px 0 2px">Pode publicar nos grupos</div>${checks('nu-g')}</div>
-      <div class="sub">Administrador: acesso total · Editor: publica só nos grupos marcados · Visualizador: somente leitura</div>
+      <div class="sub">Administrador: acesso total · Editor: publica só nos grupos marcados · Visualizador: somente leitura
+        ${isSuper?' · Super Admin: acesso a todas as empresas':''}</div>
+      ${isSuper?'<div class="sub">Selecione a empresa ativa (acima, na barra lateral) antes de criar contas admin/editor/visualizador.</div>':''}
     </div>
     <div class="card"><div class="list">`+
     users.map(u=>`<div class="it">
       <div class="grow"><b>${esc(u.email)}</b>
         <div style="margin-top:5px"><span class="tag role-${u.role}">${ROLE[u.role]||u.role}</span>
+        ${u.is_locked?'<span class="tag" style="background:var(--dead-bg);color:var(--dead)">Bloqueada</span>':''}
         ${u.role==='manager' ? (u.groups.length ? u.groups.map(g=>`<span class="chip">${esc(g.name)}</span>`).join('')
           : '<span class="sub">sem grupos — não publica em lugar nenhum</span>') : ''}</div></div>
       <select onchange="updUser('${u.id}',{role:this.value})" aria-label="Papel">
-        ${['manager','viewer','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE[r]}</option>`).join('')}
+        ${roleOpts.map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE[r]||r}</option>`).join('')}
       </select>
       ${u.role==='manager'?`<button class="btn ghost sm" onclick="$('#ug-${u.id}').classList.toggle('hidden')">Grupos</button>`:''}
+      ${u.is_locked?`<button class="ico" onclick="unlockUser('${u.id}','${esc(u.email)}')" title="Desbloquear conta" aria-label="Desbloquear conta">🔓</button>`:''}
       <button class="ico" onclick="resetPass('${u.id}','${esc(u.email)}')" title="Trocar senha" aria-label="Trocar senha">${I.key}</button>
       <button class="ico del" onclick="delUser('${u.id}','${esc(u.email)}')" title="Excluir" aria-label="Excluir">${I.x}</button>
       ${u.role==='manager'?`<div id="ug-${u.id}" class="hidden" style="flex-basis:100%">
@@ -1298,6 +1573,82 @@ function saveUserGroups(id){
 function resetPass(id,email){ const p=prompt('Nova senha para '+email+':'); if(p) updUser(id,{password:p}) }
 const delUser = (id,email) => confirm('Excluir a conta '+email+'?') && api('/users/'+id,{method:'DELETE'})
   .then(()=>{toast('Conta excluída');loadUsers()}).catch(e=>toast(e.message,'err'));
+const unlockUser = (id,email) => api('/users/'+id+'/unlock',{method:'POST'})
+  .then(()=>{toast('Conta desbloqueada','ok');loadUsers()}).catch(e=>toast(e.message,'err'));
+
+/* ---------- Empresas (somente super_admin) ---------- */
+function dueBadge(c){
+  if(!c.due_date) return `<span class="tag">Sem vencimento</span>`;
+  const days = Math.round((new Date(c.due_date+'T00:00:00Z')-new Date(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+  if(days<0) return `<span class="tag dead">Vencida há ${-days}d</span>`;
+  if(days<=7) return `<span class="tag wait">Vence em ${days}d</span>`;
+  return `<span class="tag live">Vence em ${days}d</span>`;
+}
+async function loadCompanies(){
+  const list = await api('/companies');
+  window._companies_ = list;
+  $('#tab-companies').innerHTML =
+    `<div class="head"><h2>Empresas</h2><span class="lbl">${list.length} empresas</span></div>
+    <div class="card"><h3>Nova empresa</h3>
+      <div class="row">
+        <input id="ncname" class="grow" placeholder="Nome da empresa">
+        <input id="ncemail" class="grow" type="email" placeholder="E-mail do admin">
+        <input id="ncpass" class="grow" type="password" placeholder="Senha do admin">
+        <button class="btn" onclick="createCompany()">Criar empresa</button>
+      </div>
+      <div class="sub">Cria a empresa já com sua primeira conta administradora. Vencimento, limite de telas e WhatsApp se ajustam depois, em Editar.</div>
+    </div>
+    <div class="card"><div class="list">`+
+    list.map(c=>`<div class="it">
+      <div class="grow"><b>${esc(c.name)}</b>
+        <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="tag ${c.active?'live':'dead'}">${c.active?'Ativa':'Suspensa'}</span>
+          ${dueBadge(c)}
+          <span class="tag">${c.device_count}${c.screen_limit!=null?'/'+c.screen_limit:''} telas</span>
+        </div></div>
+      <button class="btn ghost sm" onclick="$('#ce-${c.id}').classList.toggle('hidden')">Editar</button>
+      <button class="btn ghost sm" onclick="toggleCompany('${c.id}',${c.active?0:1})">${c.active?'Suspender':'Reativar'}</button>
+      <div id="ce-${c.id}" class="hidden" style="flex-basis:100%;margin-top:10px">
+        <div class="row">
+          <div class="grow" style="min-width:150px">
+            <label class="lbl">Vencimento</label>
+            <input id="cd-${c.id}" type="date" value="${c.due_date||''}" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:150px">
+            <label class="lbl">Limite de telas</label>
+            <input id="cl-${c.id}" type="number" min="0" value="${c.screen_limit??''}" placeholder="Sem limite" style="width:100%">
+          </div>
+          <div class="grow" style="min-width:190px">
+            <label class="lbl">WhatsApp p/ aviso (DDI+DDD+número)</label>
+            <input id="cw-${c.id}" value="${esc(c.whatsapp||'')}" placeholder="5521999999999" style="width:100%">
+          </div>
+        </div>
+        <div class="row" style="margin-top:9px">
+          <button class="btn sm" onclick="saveCompany('${c.id}')">Salvar</button>
+          <button class="btn ghost sm" onclick="renewCompany('${c.id}',30)">Renovar +30 dias</button>
+          <button class="btn ghost sm" onclick="renewCompany('${c.id}',365)">Renovar +1 ano</button>
+        </div>
+      </div>
+    </div>`).join('')+`</div></div>`;
+}
+function createCompany(){
+  const name=$('#ncname').value.trim(), admin_email=$('#ncemail').value.trim(), admin_password=$('#ncpass').value;
+  if(!name||!admin_email||!admin_password) return toast('Informe nome, e-mail e senha','err');
+  api('/companies',{method:'POST',body:{name,admin_email,admin_password}})
+    .then(()=>{toast('Empresa criada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
+}
+function saveCompany(id){
+  const due_date = $('#cd-'+id).value || null;
+  const limitRaw = $('#cl-'+id).value;
+  const screen_limit = limitRaw===''? null : Number(limitRaw);
+  const whatsapp = $('#cw-'+id).value.trim();
+  api('/companies/'+id,{method:'PUT',body:{due_date,screen_limit,whatsapp}})
+    .then(()=>{toast('Empresa atualizada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
+}
+const renewCompany = (id,days) => api('/companies/'+id+'/renew',{method:'POST',body:{days}})
+  .then(()=>{toast('Assinatura renovada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
+const toggleCompany = (id,active) => api('/companies/'+id,{method:'PUT',body:{active:!!active}})
+  .then(()=>{toast('Empresa atualizada','ok');loadCompanies()}).catch(e=>toast(e.message,'err'));
 
 /* ================= EDITOR DE LAYOUT ================= */
 let lmDev=null, lmLays=[];

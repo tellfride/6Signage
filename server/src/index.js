@@ -8,15 +8,34 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuid } = require('uuid');
 const { WebSocketServer } = require('ws');
+const helmet = require('helmet');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const cron = require('node-cron');
+const { sendWhatsApp } = require('./whatsapp');
 const db = require('./db');
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'troque-este-segredo-em-producao';
+
+// Sem JWT_SECRET: em produção o servidor recusa iniciar (nunca roda com um
+// segredo previsível); em desenvolvimento gera um valor aleatório por processo
+// (não fica fixo no código-fonte, mas também não trava quem só quer testar).
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('JWT_SECRET não definido. Defina a variável de ambiente antes de iniciar em produção.');
+    process.exit(1);
+  }
+  JWT_SECRET = crypto.randomBytes(32).toString('hex');
+  console.warn('[dev] JWT_SECRET não definido — usando um segredo aleatório só para esta execução.');
+}
+
 const MEDIA_DIR = path.join(__dirname, '..', 'media');
 const BG_DIR = path.join(__dirname, '..', 'backgrounds');
 fs.mkdirSync(BG_DIR, { recursive: true });
 
 const app = express();
+app.set('trust proxy', 1); // necessário p/ rate-limit por IP funcionar correto detrás do nginx (ver README)
+app.use(helmet({ contentSecurityPolicy: false })); // CSP fica para depois, calibrada com o domínio do Turnstile
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/media', express.static(MEDIA_DIR));
@@ -64,7 +83,15 @@ function notifyLayoutDevices(layoutId) {
 }
 
 app.get('/api/health', (req, res) =>
-  res.json({ app: '6signage', version: require('../package.json').version }));
+  res.json({ app: 'vitrinion', version: require('../package.json').version }));
+
+// Config pública mínima para o front-end montar o widget de captcha sem build step.
+app.get('/api/config', (req, res) => {
+  res.json({
+    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || null,
+    version: require('../package.json').version
+  });
+});
 
 // ---------- Auto-update dos players ----------
 const hashCache = new Map(); // path -> { mtime, size, sha256 }
@@ -98,46 +125,141 @@ app.get('/api/player/version', (req, res) => {
 });
 
 // ---------- Autenticação ----------
+// Empresa suspensa manualmente ou com assinatura vencida: bloqueia login e
+// qualquer chamada de API para quem não é super_admin. Não afeta as rotas do
+// player (register/manifest/heartbeat/ws), que não passam por auth() — as
+// telas continuam exibindo o último conteúdo mesmo com a empresa vencida.
+function companyBlockReason(companyId) {
+  if (!companyId) return null;
+  const c = db.prepare('SELECT active, due_date FROM companies WHERE id = ?').get(companyId);
+  if (!c) return null;
+  if (!c.active) return { status: 403, error: 'Empresa suspensa. Entre em contato com o suporte.' };
+  if (c.due_date && c.due_date < new Date().toISOString().slice(0, 10))
+    return { status: 402, error: 'Assinatura vencida. Entre em contato para renovar o acesso.' };
+  return null;
+}
+
 function auth(req, res, next) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Token ausente' });
   try {
     req.user = jwt.verify(token, JWT_SECRET);
-    next();
   } catch {
-    res.status(401).json({ error: 'Token inválido ou expirado' });
+    return res.status(401).json({ error: 'Token inválido ou expirado' });
   }
+  if (req.user.role !== 'super_admin') {
+    const blocked = companyBlockReason(req.user.company_id);
+    if (blocked) return res.status(blocked.status).json({ error: blocked.error });
+  }
+  next();
 }
 
-// Exige um dos papéis informados (viewer é somente leitura)
+// Exige um dos papéis informados (viewer é somente leitura). super_admin
+// passa em qualquer checagem — é um superconjunto de admin.
 function requireRole(...roles) {
   return (req, res, next) =>
-    roles.includes(req.user.role) ? next()
+    (roles.includes(req.user.role) || req.user.role === 'super_admin') ? next()
       : res.status(403).json({ error: 'Sem permissão para esta ação' });
 }
 const canWrite = requireRole('admin', 'manager');
 const adminOnly = requireRole('admin');
+const superAdminOnly = requireRole('super_admin');
 
-// Grupos em que o usuário pode publicar (admin: todos)
+// Grupos em que o usuário pode publicar (admin/super_admin: todos os da empresa)
 function allowedGroups(user) {
-  if (user.role === 'admin') return null; // null = sem restrição
+  if (user.role === 'admin' || user.role === 'super_admin') return null; // null = sem restrição
   return db.prepare('SELECT group_id FROM user_groups WHERE user_id = ?')
     .all(user.id).map(r => r.group_id);
 }
 
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body || {};
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-  if (!user || !bcrypt.compareSync(password || '', user.password_hash))
-    return res.status(401).json({ error: 'Credenciais inválidas' });
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-  res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
+// ---------- Multi-tenancy ----------
+// Empresa em nome de quem a requisição age: para papéis normais, é sempre a
+// própria empresa do token (nunca confia em nada vindo do cliente); só o
+// super_admin pode "agir como" uma empresa específica, escolhida no painel
+// e enviada neste header — sem ele, super_admin lista tudo sem filtro.
+function companyCtx(req) {
+  if (req.user.role !== 'super_admin') return req.user.company_id;
+  const hdr = req.headers['x-company-id'];
+  return hdr || null;
+}
+// Dono de uma linha com company_id obrigatório (users, groups, media, playlists,
+// tickers, sidebars, layouts): super_admin é dono de tudo, sempre.
+function ownedRow(user, row) {
+  return user.role === 'super_admin' || row.company_id === user.company_id;
+}
+// Dispositivos têm company_id nullable (pendente de aprovação = de ninguém
+// ainda, qualquer admin da empresa pode ver/aprovar).
+function ownedDevice(user, device) {
+  return user.role === 'super_admin' || !device.company_id || device.company_id === user.company_id;
+}
+
+async function verifyTurnstile(token, remoteip) {
+  if (!process.env.TURNSTILE_SECRET_KEY) return process.env.NODE_ENV !== 'production'; // dev: bypass; prod: fail-closed
+  const params = new URLSearchParams({ secret: process.env.TURNSTILE_SECRET_KEY, response: token || '' });
+  if (remoteip) params.append('remoteip', remoteip);
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      { method: 'POST', body: params, signal: AbortSignal.timeout(8000) });
+    return !!(await r.json()).success;
+  } catch {
+    return false; // rede fora do ar: falha fechado, nunca abre bypass
+  }
+}
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Aguarde alguns minutos.' }
 });
 
-// ---------- Usuários (somente admin) ----------
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
+  const { email, password, captcha_token } = req.body || {};
+  if (!(await verifyTurnstile(captcha_token, req.ip)))
+    return res.status(400).json({ error: 'Verificação de segurança falhou. Tente novamente.' });
+
+  const user = db.prepare(`SELECT *,
+    (locked_until IS NOT NULL AND locked_until > datetime('now')) AS is_locked
+    FROM users WHERE email = ?`).get(email);
+  if (!user) return res.status(401).json({ error: 'Credenciais inválidas' });
+
+  if (user.is_locked)
+    return res.status(423).json({
+      error: 'Conta temporariamente bloqueada por tentativas incorretas. Peça a um administrador para desbloquear, ou tente novamente em alguns minutos.'
+    });
+
+  if (!bcrypt.compareSync(password || '', user.password_hash)) {
+    const attempts = (user.failed_attempts || 0) + 1;
+    const lock = attempts >= 3;
+    db.prepare(`UPDATE users SET failed_attempts = ?, last_failed_at = datetime('now'),
+                locked_until = ${lock ? "datetime('now','+3 minutes')" : 'locked_until'} WHERE id = ?`)
+      .run(attempts, user.id);
+    return res.status(lock ? 423 : 401).json({
+      error: lock ? 'Conta bloqueada por 3 tentativas incorretas. Tente novamente em 3 min.' : 'Credenciais inválidas'
+    });
+  }
+
+  db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+
+  if (user.role !== 'super_admin') {
+    const blocked = companyBlockReason(user.company_id);
+    if (blocked) return res.status(blocked.status).json({ error: blocked.error });
+  }
+
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, company_id: user.company_id },
+    JWT_SECRET, { expiresIn: '8h' });
+  res.json({ token, user: { id: user.id, email: user.email, role: user.role, company_id: user.company_id } });
+});
+
+// ---------- Usuários (admin da própria empresa, ou super_admin em qualquer uma) ----------
 app.get('/api/users', auth, adminOnly, (req, res) => {
-  const users = db.prepare('SELECT id, email, role, created_at FROM users ORDER BY email').all();
+  const cid = companyCtx(req);
+  const users = cid
+    ? db.prepare(`SELECT id, email, role, company_id, created_at, failed_attempts,
+        (locked_until IS NOT NULL AND locked_until > datetime('now')) AS is_locked
+        FROM users WHERE company_id = ? ORDER BY email`).all(cid)
+    : db.prepare(`SELECT id, email, role, company_id, created_at, failed_attempts,
+        (locked_until IS NOT NULL AND locked_until > datetime('now')) AS is_locked
+        FROM users ORDER BY email`).all();
   for (const u of users) {
     u.groups = db.prepare(`SELECT g.id, g.name FROM user_groups ug
                            JOIN device_groups g ON g.id = ug.group_id
@@ -149,30 +271,45 @@ app.get('/api/users', auth, adminOnly, (req, res) => {
 app.post('/api/users', auth, adminOnly, (req, res) => {
   const { email, password, role, group_ids } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
-  if (!['admin', 'manager', 'viewer'].includes(role)) return res.status(400).json({ error: 'Papel inválido' });
+  const allowedRoles = req.user.role === 'super_admin' ? ['super_admin', 'admin', 'manager', 'viewer'] : ['admin', 'manager', 'viewer'];
+  if (!allowedRoles.includes(role)) return res.status(400).json({ error: 'Papel inválido' });
+  let cid = null;
+  if (role !== 'super_admin') {
+    cid = companyCtx(req);
+    if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar esta conta' });
+  }
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email))
     return res.status(409).json({ error: 'Já existe um usuário com este e-mail' });
   const id = uuid();
-  db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?,?,?,?)')
-    .run(id, email, bcrypt.hashSync(password, 10), role);
+  db.prepare('INSERT INTO users (id, email, password_hash, role, company_id) VALUES (?,?,?,?,?)')
+    .run(id, email, bcrypt.hashSync(password, 10), role, cid);
+  const validGroups = cid
+    ? (group_ids || []).filter(g => db.prepare('SELECT id FROM device_groups WHERE id = ? AND company_id = ?').get(g, cid))
+    : [];
   const ins = db.prepare('INSERT INTO user_groups (user_id, group_id) VALUES (?,?)');
-  (group_ids || []).forEach(g => ins.run(id, g));
-  res.status(201).json({ id, email, role });
+  validGroups.forEach(g => ins.run(id, g));
+  res.status(201).json({ id, email, role, company_id: cid });
 });
 
 app.put('/api/users/:id', auth, adminOnly, (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
-  if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (!u || !ownedRow(req.user, u)) return res.status(404).json({ error: 'Usuário não encontrado' });
   const { role, password, group_ids } = req.body || {};
-  if (role && u.id === req.user.id && role !== 'admin')
-    return res.status(400).json({ error: 'Você não pode rebaixar o próprio papel' });
-  if (role) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, u.id);
+  if (role && u.id === req.user.id && role !== u.role)
+    return res.status(400).json({ error: 'Você não pode alterar o próprio papel' });
+  if (role) {
+    if (req.user.role !== 'super_admin' && role === 'super_admin')
+      return res.status(403).json({ error: 'Sem permissão para conceder este papel' });
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, u.id);
+  }
   if (password) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
     .run(bcrypt.hashSync(password, 10), u.id);
-  if (Array.isArray(group_ids)) {
+  if (Array.isArray(group_ids) && u.company_id) {
+    const validGroups = group_ids.filter(g =>
+      db.prepare('SELECT id FROM device_groups WHERE id = ? AND company_id = ?').get(g, u.company_id));
     db.prepare('DELETE FROM user_groups WHERE user_id = ?').run(u.id);
     const ins = db.prepare('INSERT INTO user_groups (user_id, group_id) VALUES (?,?)');
-    group_ids.forEach(g => ins.run(u.id, g));
+    validGroups.forEach(g => ins.run(u.id, g));
   }
   res.json({ ok: true });
 });
@@ -180,8 +317,101 @@ app.put('/api/users/:id', auth, adminOnly, (req, res) => {
 app.delete('/api/users/:id', auth, adminOnly, (req, res) => {
   if (req.params.id === req.user.id)
     return res.status(400).json({ error: 'Você não pode excluir a si mesmo' });
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!u || !ownedRow(req.user, u)) return res.status(404).json({ error: 'Usuário não encontrado' });
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+app.post('/api/users/:id/unlock', auth, adminOnly, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!u || !ownedRow(req.user, u)) return res.status(404).json({ error: 'Usuário não encontrado' });
+  db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(u.id);
+  res.json({ ok: true });
+});
+
+// ---------- Empresas (somente super_admin) ----------
+function deviceCount(companyId) {
+  return db.prepare('SELECT COUNT(*) n FROM devices WHERE company_id = ? AND approved = 1').get(companyId).n;
+}
+
+app.get('/api/companies', auth, superAdminOnly, (req, res) => {
+  const list = db.prepare('SELECT * FROM companies ORDER BY name').all();
+  for (const c of list) c.device_count = deviceCount(c.id);
+  res.json(list);
+});
+
+app.post('/api/companies', auth, superAdminOnly, (req, res) => {
+  const { name, admin_email, admin_password } = req.body || {};
+  if (!name || !admin_email || !admin_password)
+    return res.status(400).json({ error: 'Nome, e-mail e senha do admin são obrigatórios' });
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(admin_email))
+    return res.status(409).json({ error: 'Já existe um usuário com este e-mail' });
+  const companyId = uuid(), userId = uuid();
+  db.exec('BEGIN');
+  try {
+    db.prepare('INSERT INTO companies (id, name) VALUES (?,?)').run(companyId, name);
+    db.prepare('INSERT INTO users (id, email, password_hash, role, company_id) VALUES (?,?,?,?,?)')
+      .run(userId, admin_email, bcrypt.hashSync(admin_password, 10), 'admin', companyId);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  res.status(201).json(db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId));
+});
+
+app.put('/api/companies/:id', auth, superAdminOnly, (req, res) => {
+  const c = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Empresa não encontrada' });
+  const b = req.body || {};
+  // due_date/screen_limit precisam poder ser explicitamente limpos (voltar a
+  // "sem vencimento"/"sem limite"), então usam presença da chave, não COALESCE.
+  db.prepare(`UPDATE companies SET
+      name = COALESCE(?, name),
+      active = COALESCE(?, active),
+      due_date = ?,
+      screen_limit = ?,
+      whatsapp = COALESCE(?, whatsapp),
+      last_reminder_stage = CASE WHEN ? THEN NULL ELSE last_reminder_stage END
+      WHERE id = ?`)
+    .run(
+      b.name ?? null,
+      b.active === undefined ? null : (b.active ? 1 : 0),
+      'due_date' in b ? (b.due_date || null) : c.due_date,
+      'screen_limit' in b ? (b.screen_limit === '' || b.screen_limit == null ? null : b.screen_limit) : c.screen_limit,
+      b.whatsapp ?? null,
+      'due_date' in b ? 1 : 0,
+      c.id);
+  const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(c.id);
+  updated.device_count = deviceCount(c.id);
+  res.json(updated);
+});
+
+// Atalho de renovação: soma dias a partir do vencimento atual (se ainda for
+// futuro) ou de hoje (se já venceu), e reativa a empresa automaticamente —
+// renovar o pagamento não deveria exigir um segundo clique pra "desuspender".
+app.post('/api/companies/:id/renew', auth, superAdminOnly, (req, res) => {
+  const c = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Empresa não encontrada' });
+  const days = clamp(req.body?.days, 1, 3650, 30);
+  const today = new Date().toISOString().slice(0, 10);
+  const base = (c.due_date && c.due_date > today) ? c.due_date : today;
+  const next = new Date(base + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + days);
+  db.prepare('UPDATE companies SET due_date = ?, active = 1, last_reminder_stage = NULL WHERE id = ?')
+    .run(next.toISOString().slice(0, 10), c.id);
+  const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(c.id);
+  updated.device_count = deviceCount(c.id);
+  res.json(updated);
+});
+
+// Dados da própria empresa (qualquer papel autenticado) — usado pelo painel
+// pra mostrar um aviso de vencimento pro admin do cliente, sem precisar ser
+// super_admin.
+app.get('/api/company', auth, (req, res) => {
+  if (!req.user.company_id) return res.json(null);
+  const c = db.prepare('SELECT id, name, active, due_date, screen_limit FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!c) return res.json(null);
+  c.device_count = deviceCount(c.id);
+  res.json(c);
 });
 
 // ---------- Mídia ----------
@@ -198,7 +428,10 @@ const upload = multer({
 });
 
 app.get('/api/media', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM media ORDER BY uploaded_at DESC').all());
+  const cid = companyCtx(req);
+  res.json(cid
+    ? db.prepare('SELECT * FROM media WHERE company_id = ? ORDER BY uploaded_at DESC').all(cid)
+    : db.prepare('SELECT * FROM media ORDER BY uploaded_at DESC').all());
 });
 
 // SHA-256 em streaming: um vídeo de 1 GB não pode passar pela memória inteiro
@@ -212,19 +445,21 @@ function fileSha256(p) {
 
 app.post('/api/media/upload', auth, canWrite, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de enviar mídia' });
   const isVideo = /\.(mp4|mkv|webm)$/i.test(req.file.filename);
   const checksum = await fileSha256(req.file.path);
   const id = uuid();
-  db.prepare(`INSERT INTO media (id, filename, file_path, file_type, duration_seconds, file_size, checksum)
-              VALUES (?,?,?,?,?,?,?)`)
+  db.prepare(`INSERT INTO media (id, filename, file_path, file_type, duration_seconds, file_size, checksum, company_id)
+              VALUES (?,?,?,?,?,?,?,?)`)
     .run(id, req.file.originalname, `/media/${req.file.filename}`,
-         isVideo ? 'video' : 'image', isVideo ? null : 10, req.file.size, checksum);
+         isVideo ? 'video' : 'image', isVideo ? null : 10, req.file.size, checksum, cid);
   res.status(201).json(db.prepare('SELECT * FROM media WHERE id = ?').get(id));
 });
 
 app.delete('/api/media/:id', auth, canWrite, (req, res) => {
   const m = db.prepare('SELECT * FROM media WHERE id = ?').get(req.params.id);
-  if (!m) return res.status(404).json({ error: 'Não encontrado' });
+  if (!m || !ownedRow(req.user, m)) return res.status(404).json({ error: 'Não encontrado' });
   const abs = path.join(MEDIA_DIR, path.basename(m.file_path));
   if (fs.existsSync(abs)) fs.unlinkSync(abs);
   db.prepare('DELETE FROM media WHERE id = ?').run(req.params.id);
@@ -233,7 +468,10 @@ app.delete('/api/media/:id', auth, canWrite, (req, res) => {
 
 // ---------- Playlists ----------
 app.get('/api/playlists', auth, (req, res) => {
-  const lists = db.prepare('SELECT * FROM playlists ORDER BY created_at DESC').all();
+  const cid = companyCtx(req);
+  const lists = cid
+    ? db.prepare('SELECT * FROM playlists WHERE company_id = ? ORDER BY created_at DESC').all(cid)
+    : db.prepare('SELECT * FROM playlists ORDER BY created_at DESC').all();
   for (const p of lists) {
     p.items = db.prepare(`
       SELECT pi.*, m.filename, m.file_path, m.file_type, m.duration_seconds, m.checksum
@@ -246,15 +484,18 @@ app.get('/api/playlists', auth, (req, res) => {
 app.post('/api/playlists', auth, canWrite, (req, res) => {
   const { name, description } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar a playlist' });
   const id = uuid();
-  db.prepare('INSERT INTO playlists (id, name, description) VALUES (?,?,?)').run(id, name, description || null);
+  db.prepare('INSERT INTO playlists (id, name, description, company_id) VALUES (?,?,?,?)')
+    .run(id, name, description || null, cid);
   res.status(201).json(db.prepare('SELECT * FROM playlists WHERE id = ?').get(id));
 });
 
 // Substitui todos os itens da playlist (ordem enviada = ordem final)
 app.put('/api/playlists/:id/items', auth, canWrite, (req, res) => {
-  const p = db.prepare('SELECT id FROM playlists WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Playlist não encontrada' });
+  const p = db.prepare('SELECT * FROM playlists WHERE id = ?').get(req.params.id);
+  if (!p || !ownedRow(req.user, p)) return res.status(404).json({ error: 'Playlist não encontrada' });
   const items = req.body.items || [];
   db.exec('BEGIN');
   try {
@@ -271,6 +512,8 @@ app.put('/api/playlists/:id/items', auth, canWrite, (req, res) => {
 });
 
 app.delete('/api/playlists/:id', auth, canWrite, (req, res) => {
+  const p = db.prepare('SELECT * FROM playlists WHERE id = ?').get(req.params.id);
+  if (!p || !ownedRow(req.user, p)) return res.status(404).json({ error: 'Playlist não encontrada' });
   db.prepare('UPDATE devices SET playlist_id = NULL WHERE playlist_id = ?').run(req.params.id);
   db.prepare('DELETE FROM playlists WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
@@ -278,8 +521,18 @@ app.delete('/api/playlists/:id', auth, canWrite, (req, res) => {
 
 // Atribuir playlist a dispositivo ou grupo
 app.post('/api/playlists/:id/assign', auth, canWrite, (req, res) => {
+  const p = db.prepare('SELECT * FROM playlists WHERE id = ?').get(req.params.id);
+  if (!p || !ownedRow(req.user, p)) return res.status(404).json({ error: 'Playlist não encontrada' });
   const { device_id, group_id } = req.body || {};
   if (!device_id && !group_id) return res.status(400).json({ error: 'Informe device_id ou group_id' });
+  if (device_id) {
+    const dev = db.prepare('SELECT * FROM devices WHERE id = ?').get(device_id);
+    if (!dev || !ownedDevice(req.user, dev)) return res.status(404).json({ error: 'Tela não encontrada' });
+  }
+  if (group_id) {
+    const grp = db.prepare('SELECT * FROM device_groups WHERE id = ?').get(group_id);
+    if (!grp || !ownedRow(req.user, grp)) return res.status(404).json({ error: 'Grupo não encontrado' });
+  }
   const allowed = allowedGroups(req.user);
   if (allowed) { // manager: valida permissão de publicação no grupo
     const target = group_id ||
@@ -298,17 +551,25 @@ app.post('/api/playlists/:id/assign', auth, canWrite, (req, res) => {
 });
 
 // ---------- Grupos ----------
-app.get('/api/groups', auth, (req, res) =>
-  res.json(db.prepare('SELECT * FROM device_groups ORDER BY name').all()));
+app.get('/api/groups', auth, (req, res) => {
+  const cid = companyCtx(req);
+  res.json(cid
+    ? db.prepare('SELECT * FROM device_groups WHERE company_id = ? ORDER BY name').all(cid)
+    : db.prepare('SELECT * FROM device_groups ORDER BY name').all());
+});
 
 app.post('/api/groups', auth, adminOnly, (req, res) => {
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar o grupo' });
   const id = uuid();
-  db.prepare('INSERT INTO device_groups (id, name, description) VALUES (?,?,?)')
-    .run(id, req.body.name, req.body.description || null);
+  db.prepare('INSERT INTO device_groups (id, name, description, company_id) VALUES (?,?,?,?)')
+    .run(id, req.body.name, req.body.description || null, cid);
   res.status(201).json(db.prepare('SELECT * FROM device_groups WHERE id = ?').get(id));
 });
 
 app.delete('/api/groups/:id', auth, adminOnly, (req, res) => {
+  const g = db.prepare('SELECT * FROM device_groups WHERE id = ?').get(req.params.id);
+  if (!g || !ownedRow(req.user, g)) return res.status(404).json({ error: 'Grupo não encontrado' });
   db.prepare('DELETE FROM device_groups WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -317,14 +578,19 @@ app.delete('/api/groups/:id', auth, adminOnly, (req, res) => {
 app.get('/api/devices', auth, (req, res) => {
   const cutoff = new Date(Date.now() - 90_000).toISOString().replace('T', ' ').slice(0, 19);
   db.prepare(`UPDATE devices SET status='offline' WHERE last_heartbeat IS NULL OR last_heartbeat < ?`).run(cutoff);
-  const devices = db.prepare(`
+  const cid = companyCtx(req);
+  const baseSql = `
     SELECT d.*, g.name AS group_name, p.name AS playlist_name,
            s.city AS sidebar_city, s.lat AS sidebar_lat, s.lon AS sidebar_lon
     FROM devices d
     LEFT JOIN device_groups g ON g.id = d.group_id
     LEFT JOIN playlists p ON p.id = d.playlist_id
-    LEFT JOIN sidebars s ON s.id = d.sidebar_id
-    ORDER BY d.name`).all();
+    LEFT JOIN sidebars s ON s.id = d.sidebar_id`;
+  // Telas da própria empresa + pendentes de qualquer empresa (pool de aprovação
+  // — ver nota de arquitetura no README sobre o vínculo tela↔empresa).
+  const devices = cid
+    ? db.prepare(`${baseSql} WHERE d.company_id = ? OR (d.company_id IS NULL AND d.approved = 0) ORDER BY d.name`).all(cid)
+    : db.prepare(`${baseSql} ORDER BY d.name`).all();
 
   // Dados para o espelho da tela no painel: frame no ar, clima e rodapé
   const byFile = new Map(db.prepare('SELECT file_path, file_type FROM media').all()
@@ -363,15 +629,37 @@ app.get('/api/devices', auth, (req, res) => {
 
 app.put('/api/devices/:id', auth, canWrite, (req, res) => {
   const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
-  if (!d) return res.status(404).json({ error: 'Tela não encontrada' });
+  if (!d || !ownedDevice(req.user, d)) return res.status(404).json({ error: 'Tela não encontrada' });
   // Campo presente no body é autoritativo (null/'' limpa) — COALESCE impediria
   // remover uma tela de um grupo ou apagar o local.
   const b = req.body || {};
   const sets = [], vals = [];
   if ('name' in b && (b.name || '').trim()) { sets.push('name = ?'); vals.push(b.name.trim()); }
   if ('location' in b) { sets.push('location = ?'); vals.push((b.location || '').trim() || null); }
-  if ('group_id' in b) { sets.push('group_id = ?'); vals.push(b.group_id || null); }
-  if ('approved' in b) { sets.push('approved = ?'); vals.push(b.approved ? 1 : 0); }
+  if ('group_id' in b) {
+    if (b.group_id) {
+      const g = db.prepare('SELECT * FROM device_groups WHERE id = ?').get(b.group_id);
+      if (!g || !ownedRow(req.user, g)) return res.status(400).json({ error: 'Grupo inválido' });
+    }
+    sets.push('group_id = ?'); vals.push(b.group_id || null);
+  }
+  if ('approved' in b) {
+    const turningOn = !!b.approved && !d.approved; // 0->1: é aqui que o limite de telas conta
+    let cid = d.company_id;
+    if (b.approved && !d.company_id) {
+      // Tela ainda não pertence a ninguém: quem aprova reivindica p/ sua empresa.
+      cid = companyCtx(req);
+      if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa para aprovar esta tela' });
+    }
+    if (turningOn && cid) {
+      const company = db.prepare('SELECT screen_limit FROM companies WHERE id = ?').get(cid);
+      if (company?.screen_limit != null && deviceCount(cid) >= company.screen_limit) {
+        return res.status(400).json({ error: `Limite de ${company.screen_limit} telas atingido para esta empresa.` });
+      }
+    }
+    sets.push('approved = ?'); vals.push(b.approved ? 1 : 0);
+    if (b.approved && !d.company_id) { sets.push('company_id = ?'); vals.push(cid); }
+  }
   if ('screen_size' in b) {
     sets.push('screen_size = ?');
     vals.push(b.screen_size === '' || b.screen_size == null ? null : clamp(b.screen_size, 5, 200, null));
@@ -381,17 +669,32 @@ app.put('/api/devices/:id', auth, canWrite, (req, res) => {
 });
 
 app.delete('/api/devices/:id', auth, adminOnly, (req, res) => {
+  const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
+  if (!d || !ownedDevice(req.user, d)) return res.status(404).json({ error: 'Tela não encontrada' });
   db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
 app.post('/api/devices/:id/command', auth, canWrite, (req, res) => {
+  const d = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
+  if (!d || !ownedDevice(req.user, d)) return res.status(404).json({ error: 'Tela não encontrada' });
   const sent = sendToDevice(req.params.id, { type: 'command', command: req.body.command });
   res.json({ ok: sent, delivered: sent });
 });
 
 // ---------- API do Player (sem JWT; autentica por device_key) ----------
-app.post('/api/devices/register', (req, res) => {
+const registerLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Muitas tentativas de registro. Aguarde um minuto.' }
+});
+// Chave por device_key (não IP): várias telas reais compartilham IP na mesma loja.
+const deviceKeyLimiter = rateLimit({
+  windowMs: 30 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => req.query.device_key || (req.body && req.body.device_key) || ipKeyGenerator(req.ip),
+  message: { error: 'Muitas requisições deste dispositivo.' }
+});
+
+app.post('/api/devices/register', registerLimiter, (req, res) => {
   const { device_key, device_name, resolution, os_version, client_version, platform } = req.body || {};
   if (!device_key) return res.status(400).json({ error: 'device_key obrigatório' });
   // plataforma é declarada pelo próprio agente (não inferida do user-agent) — 'windows' | 'android'
@@ -399,6 +702,7 @@ app.post('/api/devices/register', (req, res) => {
   let d = db.prepare('SELECT * FROM devices WHERE device_key = ?').get(device_key);
   if (!d) {
     const id = uuid();
+    // company_id fica NULL até um admin aprovar — ver ownedDevice()/pool de aprovação.
     db.prepare(`INSERT INTO devices (id, name, device_key, resolution, os_version, client_version, platform, status)
                 VALUES (?,?,?,?,?,?,?, 'online')`)
       .run(id, device_name || 'Novo dispositivo', device_key, resolution || null, os_version || null, client_version || null, plat);
@@ -492,27 +796,30 @@ app.get('/api/weather/search', auth, async (req, res) => {
   }
 });
 
-// Telas que o usuário pode alterar (admin: todas; editor: só dos seus grupos)
+// Telas que o usuário pode alterar (empresa própria + grupo, se for editor)
 function filterAllowedDevices(user, ids) {
-  // descarta ids inexistentes (evita violação de FK) e, para editores,
-  // restringe aos grupos permitidos
-  const existing = new Set(db.prepare('SELECT id FROM devices').all().map(r => r.id));
-  ids = ids.filter(id => existing.has(id));
+  // descarta ids inexistentes/de outra empresa (evita violação de FK e vazamento
+  // entre tenants) e, para editores, restringe também aos grupos permitidos
+  const existing = db.prepare('SELECT id, company_id, group_id FROM devices').all();
+  const byId = new Map(existing.map(d => [d.id, d]));
+  ids = ids.filter(id => byId.has(id) && ownedDevice(user, byId.get(id)));
   const allowed = allowedGroups(user);
   if (!allowed) return ids;
   if (!allowed.length) return [];
-  const ph = allowed.map(() => '?').join(',');
-  const ok = db.prepare(`SELECT id FROM devices WHERE group_id IN (${ph})`).all(...allowed).map(r => r.id);
-  return ids.filter(id => ok.includes(id));
+  return ids.filter(id => allowed.includes(byId.get(id).group_id));
 }
 function canEditDevice(user, device) {
+  if (!ownedDevice(user, device)) return false;
   const allowed = allowedGroups(user);
   return !allowed || (device.group_id && allowed.includes(device.group_id));
 }
 
 // ---------- Faixas de rodapé (avisos) ----------
 app.get('/api/tickers', auth, (req, res) => {
-  const list = db.prepare('SELECT * FROM tickers ORDER BY name').all();
+  const cid = companyCtx(req);
+  const list = cid
+    ? db.prepare('SELECT * FROM tickers WHERE company_id = ? ORDER BY name').all(cid)
+    : db.prepare('SELECT * FROM tickers ORDER BY name').all();
   for (const t of list)
     t.device_ids = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?')
       .all(t.id).map(r => r.device_id);
@@ -522,14 +829,16 @@ app.get('/api/tickers', auth, (req, res) => {
 app.post('/api/tickers', auth, canWrite, (req, res) => {
   const { name, text } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Dê um nome à faixa' });
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar a faixa' });
   const id = uuid();
-  db.prepare('INSERT INTO tickers (id, name, text) VALUES (?,?,?)').run(id, name, text || '');
+  db.prepare('INSERT INTO tickers (id, name, text, company_id) VALUES (?,?,?,?)').run(id, name, text || '', cid);
   res.status(201).json(db.prepare('SELECT * FROM tickers WHERE id = ?').get(id));
 });
 
 app.put('/api/tickers/:id', auth, canWrite, (req, res) => {
-  const t = db.prepare('SELECT id FROM tickers WHERE id = ?').get(req.params.id);
-  if (!t) return res.status(404).json({ error: 'Faixa não encontrada' });
+  const t = db.prepare('SELECT * FROM tickers WHERE id = ?').get(req.params.id);
+  if (!t || !ownedRow(req.user, t)) return res.status(404).json({ error: 'Faixa não encontrada' });
   const { name, text } = req.body || {};
   db.prepare('UPDATE tickers SET name = COALESCE(?, name), text = COALESCE(?, text) WHERE id = ?')
     .run(name ?? null, text ?? null, t.id);
@@ -539,6 +848,8 @@ app.put('/api/tickers/:id', auth, canWrite, (req, res) => {
 });
 
 app.delete('/api/tickers/:id', auth, canWrite, (req, res) => {
+  const t = db.prepare('SELECT * FROM tickers WHERE id = ?').get(req.params.id);
+  if (!t || !ownedRow(req.user, t)) return res.status(404).json({ error: 'Faixa não encontrada' });
   const devs = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?').all(req.params.id);
   db.prepare('DELETE FROM tickers WHERE id = ?').run(req.params.id);
   devs.forEach(r => notifyDevice(r.device_id));
@@ -547,8 +858,8 @@ app.delete('/api/tickers/:id', auth, canWrite, (req, res) => {
 
 // Atribuir a faixa a telas: uma, várias ou todas (envie a lista de ids)
 app.put('/api/tickers/:id/devices', auth, canWrite, (req, res) => {
-  const t = db.prepare('SELECT id FROM tickers WHERE id = ?').get(req.params.id);
-  if (!t) return res.status(404).json({ error: 'Faixa não encontrada' });
+  const t = db.prepare('SELECT * FROM tickers WHERE id = ?').get(req.params.id);
+  if (!t || !ownedRow(req.user, t)) return res.status(404).json({ error: 'Faixa não encontrada' });
   const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
   const before = db.prepare('SELECT device_id FROM device_tickers WHERE ticker_id = ?').all(t.id).map(r => r.device_id);
   const editable = filterAllowedDevices(req.user, before);
@@ -567,7 +878,10 @@ app.put('/api/tickers/:id/devices', auth, canWrite, (req, res) => {
 
 // ---------- Perfis de barra lateral (clima) ----------
 app.get('/api/sidebars', auth, (req, res) => {
-  const list = db.prepare('SELECT * FROM sidebars ORDER BY name').all();
+  const cid = companyCtx(req);
+  const list = cid
+    ? db.prepare('SELECT * FROM sidebars WHERE company_id = ? ORDER BY name').all(cid)
+    : db.prepare('SELECT * FROM sidebars ORDER BY name').all();
   for (const s of list)
     s.device_ids = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(s.id).map(r => r.id);
   res.json(list);
@@ -577,16 +891,18 @@ app.post('/api/sidebars', auth, canWrite, (req, res) => {
   const { name, city, postal_code, lat, lon, show_tomorrow } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Dê um nome ao perfil' });
   if (lat == null || lon == null) return res.status(400).json({ error: 'Escolha a cidade ou informe o CEP' });
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar o perfil' });
   const id = uuid();
-  db.prepare(`INSERT INTO sidebars (id, name, city, postal_code, lat, lon, show_tomorrow)
-              VALUES (?,?,?,?,?,?,?)`)
-    .run(id, name, city || null, postal_code || null, lat, lon, show_tomorrow === false ? 0 : 1);
+  db.prepare(`INSERT INTO sidebars (id, name, city, postal_code, lat, lon, show_tomorrow, company_id)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(id, name, city || null, postal_code || null, lat, lon, show_tomorrow === false ? 0 : 1, cid);
   res.status(201).json(db.prepare('SELECT * FROM sidebars WHERE id = ?').get(id));
 });
 
 app.put('/api/sidebars/:id', auth, canWrite, (req, res) => {
-  const s = db.prepare('SELECT id FROM sidebars WHERE id = ?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Perfil não encontrado' });
+  const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(req.params.id);
+  if (!s || !ownedRow(req.user, s)) return res.status(404).json({ error: 'Perfil não encontrado' });
   const b = req.body || {};
   db.prepare(`UPDATE sidebars SET name = COALESCE(?, name), city = COALESCE(?, city),
       postal_code = COALESCE(?, postal_code), lat = COALESCE(?, lat), lon = COALESCE(?, lon),
@@ -598,6 +914,8 @@ app.put('/api/sidebars/:id', auth, canWrite, (req, res) => {
 });
 
 app.delete('/api/sidebars/:id', auth, canWrite, (req, res) => {
+  const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(req.params.id);
+  if (!s || !ownedRow(req.user, s)) return res.status(404).json({ error: 'Perfil não encontrado' });
   const devs = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(req.params.id);
   db.prepare('DELETE FROM sidebars WHERE id = ?').run(req.params.id);
   devs.forEach(r => notifyDevice(r.id));
@@ -606,8 +924,8 @@ app.delete('/api/sidebars/:id', auth, canWrite, (req, res) => {
 
 // Atribuir o perfil de clima a telas (uma, várias ou todas)
 app.put('/api/sidebars/:id/devices', auth, canWrite, (req, res) => {
-  const s = db.prepare('SELECT id FROM sidebars WHERE id = ?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Perfil não encontrado' });
+  const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(req.params.id);
+  if (!s || !ownedRow(req.user, s)) return res.status(404).json({ error: 'Perfil não encontrado' });
   const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
   const before = db.prepare('SELECT id FROM devices WHERE sidebar_id = ?').all(s.id).map(r => r.id);
   const editable = filterAllowedDevices(req.user, before);
@@ -630,16 +948,28 @@ app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
   if (!canEditDevice(req.user, d))
     return res.status(403).json({ error: 'Você não tem permissão para editar esta tela' });
   const b = req.body || {};
+  if (b.sidebar_id) {
+    const s = db.prepare('SELECT * FROM sidebars WHERE id = ?').get(b.sidebar_id);
+    if (!s || !ownedRow(req.user, s)) return res.status(400).json({ error: 'Perfil de clima inválido' });
+  }
+  if (b.layout_id) {
+    const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(b.layout_id);
+    if (!L || !ownedRow(req.user, L)) return res.status(400).json({ error: 'Perfil de layout inválido' });
+  }
   db.prepare(`UPDATE devices SET sidebar_id = ?, layout_id = ?, sidebar_width = ?, ticker_height = ? WHERE id = ?`)
     .run(b.sidebar_id || null, b.layout_id || null,
          clamp(b.sidebar_width, 10, 45, d.sidebar_width || 22),
          clamp(b.ticker_height, 6, 30, d.ticker_height || 12), d.id);
   if (Array.isArray(b.ticker_ids)) {
+    const validTickers = b.ticker_ids.filter(tid => {
+      const t = db.prepare('SELECT * FROM tickers WHERE id = ?').get(tid);
+      return t && ownedRow(req.user, t);
+    });
     db.exec('BEGIN');
     try {
       db.prepare('DELETE FROM device_tickers WHERE device_id = ?').run(d.id);
       const ins = db.prepare('INSERT OR IGNORE INTO device_tickers (device_id, ticker_id) VALUES (?,?)');
-      b.ticker_ids.forEach(tid => ins.run(d.id, tid));
+      validTickers.forEach(tid => ins.run(d.id, tid));
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
@@ -649,7 +979,10 @@ app.put('/api/devices/:id/layout', auth, canWrite, (req, res) => {
 
 // ---------- Perfis de LAYOUT (tamanho + fundo) ----------
 app.get('/api/layouts', auth, (req, res) => {
-  const list = db.prepare('SELECT * FROM layouts ORDER BY name').all();
+  const cid = companyCtx(req);
+  const list = cid
+    ? db.prepare('SELECT * FROM layouts WHERE company_id = ? ORDER BY name').all(cid)
+    : db.prepare('SELECT * FROM layouts ORDER BY name').all();
   for (const L of list) {
     L.device_ids = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(L.id).map(r => r.id);
     L.group_ids = db.prepare('SELECT id FROM device_groups WHERE layout_id = ?').all(L.id).map(r => r.id);
@@ -660,16 +993,18 @@ app.get('/api/layouts', auth, (req, res) => {
 app.post('/api/layouts', auth, canWrite, (req, res) => {
   const { name, sidebar_width, ticker_height, orientation } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Dê um nome ao perfil de layout' });
+  const cid = companyCtx(req);
+  if (!cid) return res.status(400).json({ error: 'Selecione a empresa ativa antes de criar o perfil' });
   const id = uuid();
-  db.prepare(`INSERT INTO layouts (id, name, sidebar_width, ticker_height, orientation) VALUES (?,?,?,?,?)`)
+  db.prepare(`INSERT INTO layouts (id, name, sidebar_width, ticker_height, orientation, company_id) VALUES (?,?,?,?,?,?)`)
     .run(id, name, clamp(sidebar_width, 10, 45, 22), clamp(ticker_height, 6, 30, 12),
-         ['auto', 'landscape', 'portrait'].includes(orientation) ? orientation : 'auto');
+         ['auto', 'landscape', 'portrait'].includes(orientation) ? orientation : 'auto', cid);
   res.status(201).json(db.prepare('SELECT * FROM layouts WHERE id = ?').get(id));
 });
 
 app.put('/api/layouts/:id', auth, canWrite, (req, res) => {
   const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
-  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  if (!L || !ownedRow(req.user, L)) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
   const b = req.body || {};
   const sideMode = ['auto', 'color', 'image'].includes(b.sidebar_bg_mode) ? b.sidebar_bg_mode : L.sidebar_bg_mode;
   const tickMode = ['auto', 'color', 'image'].includes(b.ticker_bg_mode) ? b.ticker_bg_mode : L.ticker_bg_mode;
@@ -691,6 +1026,8 @@ app.put('/api/layouts/:id', auth, canWrite, (req, res) => {
 });
 
 app.delete('/api/layouts/:id', auth, canWrite, (req, res) => {
+  const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L || !ownedRow(req.user, L)) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
   const devs = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(req.params.id);
   const inherited = db.prepare(`SELECT d.id FROM devices d JOIN device_groups g ON g.id = d.group_id
                                  WHERE g.layout_id = ?`).all(req.params.id);
@@ -714,7 +1051,7 @@ const bgUpload = multer({
 
 app.post('/api/layouts/:id/background', auth, canWrite, bgUpload.single('file'), async (req, res) => {
   const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
-  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  if (!L || !ownedRow(req.user, L)) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
   if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
   const side = req.body.side === 'ticker' ? 'ticker' : 'sidebar';
   const checksum = await fileSha256(req.file.path);
@@ -728,8 +1065,8 @@ app.post('/api/layouts/:id/background', auth, canWrite, bgUpload.single('file'),
 
 // Atribuir o perfil de layout a telas específicas (override direto — vence o do grupo)
 app.put('/api/layouts/:id/devices', auth, canWrite, (req, res) => {
-  const L = db.prepare('SELECT id FROM layouts WHERE id = ?').get(req.params.id);
-  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L || !ownedRow(req.user, L)) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
   const wanted = filterAllowedDevices(req.user, req.body.device_ids || []);
   const before = db.prepare('SELECT id FROM devices WHERE layout_id = ?').all(L.id).map(r => r.id);
   const editable = filterAllowedDevices(req.user, before);
@@ -747,9 +1084,12 @@ app.put('/api/layouts/:id/devices', auth, canWrite, (req, res) => {
 
 // Atribuir o perfil de layout como padrão de um ou vários GRUPOS inteiros
 app.put('/api/layouts/:id/groups', auth, adminOnly, (req, res) => {
-  const L = db.prepare('SELECT id FROM layouts WHERE id = ?').get(req.params.id);
-  if (!L) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
-  const allIds = new Set(db.prepare('SELECT id FROM device_groups').all().map(r => r.id));
+  const L = db.prepare('SELECT * FROM layouts WHERE id = ?').get(req.params.id);
+  if (!L || !ownedRow(req.user, L)) return res.status(404).json({ error: 'Perfil de layout não encontrado' });
+  const cid = companyCtx(req);
+  const allIds = new Set((cid
+    ? db.prepare('SELECT id FROM device_groups WHERE company_id = ?').all(cid)
+    : db.prepare('SELECT id FROM device_groups').all()).map(r => r.id));
   const wanted = (req.body.group_ids || []).filter(id => allIds.has(id));
   const before = db.prepare('SELECT id FROM device_groups WHERE layout_id = ?').all(L.id).map(r => r.id);
   db.exec('BEGIN');
@@ -823,13 +1163,13 @@ async function buildManifest(device) {
   return { playlist, items, sync_interval: 60, layout };
 }
 
-app.get('/api/player/manifest', async (req, res) => {
+app.get('/api/player/manifest', deviceKeyLimiter, async (req, res) => {
   const d = db.prepare('SELECT * FROM devices WHERE device_key = ?').get(req.query.device_key);
   if (!d) return res.status(404).json({ error: 'Dispositivo não registrado' });
   res.json(await buildManifest(d));
 });
 
-app.post('/api/player/heartbeat', (req, res) => {
+app.post('/api/player/heartbeat', deviceKeyLimiter, (req, res) => {
   const { device_key, current_media, status } = req.body || {};
   const d = db.prepare('SELECT id FROM devices WHERE device_key = ?').get(device_key);
   if (!d) return res.status(404).json({ error: 'Dispositivo não registrado' });
@@ -870,5 +1210,32 @@ function notifyPlaylistDevices(playlistId) {
     .forEach(d => notifyDevice(d.id));
 }
 
+// ---------- Aviso de vencimento por WhatsApp ----------
+// Faixas de dias (não um dia exato): se o servidor ficar fora do ar no dia
+// certo, o próximo boot ainda calcula o estágio correto a partir da data,
+// em vez de perder o aviso. last_reminder_stage evita reenviar o mesmo aviso.
+async function checkDueDates() {
+  const today = new Date().toISOString().slice(0, 10);
+  const companies = db.prepare(`SELECT * FROM companies WHERE due_date IS NOT NULL AND active = 1`).all();
+  for (const c of companies) {
+    const daysLeft = Math.round((new Date(c.due_date) - new Date(today)) / 86400000);
+    const stage = daysLeft > 3 ? null : daysLeft >= 1 ? 'pre_due' : daysLeft === 0 ? 'due' : 'overdue';
+    if (!stage || stage === c.last_reminder_stage) continue;
+    const texts = {
+      pre_due: `Olá! A assinatura do VitriniON da ${c.name} vence em breve (${c.due_date}). Entre em contato para renovar.`,
+      due: `Olá! A assinatura do VitriniON da ${c.name} vence hoje (${c.due_date}). Renove para manter o acesso.`,
+      overdue: `Olá! A assinatura do VitriniON da ${c.name} está vencida desde ${c.due_date}. O acesso ao painel foi bloqueado.`
+    };
+    const result = c.whatsapp
+      ? await sendWhatsApp(c.whatsapp, texts[stage])
+      : { ok: false, error: 'sem_whatsapp_cadastrado' };
+    db.prepare('UPDATE companies SET last_reminder_stage = ? WHERE id = ?').run(stage, c.id);
+    db.prepare('INSERT INTO notifications_log (id, company_id, channel, kind, success, detail) VALUES (?,?,?,?,?,?)')
+      .run(uuid(), c.id, 'whatsapp', stage, result.ok ? 1 : 0, result.error);
+  }
+}
+cron.schedule('0 9 * * *', checkDueDates); // todo dia às 9h
+if (process.env.CHECK_DUE_ON_BOOT) checkDueDates().catch(e => console.error('[whatsapp] checkDueDates:', e.message));
+
 server.listen(PORT, () =>
-  console.log(`6Signage server rodando em http://0.0.0.0:${PORT}`));
+  console.log(`VitriniON server rodando em http://0.0.0.0:${PORT}`));

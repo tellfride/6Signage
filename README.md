@@ -1,4 +1,4 @@
-# 📺 6Signage — Digital Signage Corporativo
+# 📺 VitriniON — Digital Signage Corporativo
 
 Sistema completo de **sinalização digital** cliente-servidor: um servidor Linux gerencia
 playlists de vídeos e imagens e distribui automaticamente para telas Windows e Android TV,
@@ -99,27 +99,39 @@ Requisito: **Node.js 22+** (usa o SQLite embutido do Node — sem banco externo)
 git clone https://github.com/tellfride/6Signage.git
 cd 6Signage/server
 npm install
-npm run seed admin@empresa.com SuaSenhaForte   # cria o usuário administrador
-npm start                                       # http://SEU_IP:3000
+npm run seed -- --super seu@email.com SuaSenhaForte   # cria o super_admin (dono do sistema)
+npm start                                              # http://SEU_IP:3000
 ```
+
+O `super_admin` é quem cadastra as empresas-cliente (aba **Empresas** no painel — cada
+empresa já nasce com seu próprio admin). Sem a flag `--super`, `npm run seed
+email senha` cria um `admin` comum preso à "Empresa Padrão" (útil só se você
+não for usar multi-empresa). Rodar `npm run seed -- --super ...` de novo com o
+mesmo e-mail troca a senha e garante o papel `super_admin` nessa conta.
 
 Para rodar como serviço (systemd):
 
 ```bash
-sudo tee /etc/systemd/system/6signage.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/vitrinion.service > /dev/null <<EOF
 [Unit]
-Description=6Signage Server
+Description=VitriniON Server
 After=network.target
 [Service]
 WorkingDirectory=$(pwd)
 ExecStart=$(which node) src/index.js
+Environment=NODE_ENV=production
 Environment=JWT_SECRET=troque-por-um-segredo-forte
+Environment=TURNSTILE_SITE_KEY=sua-site-key
+Environment=TURNSTILE_SECRET_KEY=sua-secret-key
+Environment=EVOLUTION_API_URL=https://sua-instancia-evolution-api.com
+Environment=EVOLUTION_API_KEY=sua-api-key
+Environment=EVOLUTION_INSTANCE=nome-da-instancia
 Restart=always
 User=$USER
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo systemctl enable --now 6signage
+sudo systemctl enable --now vitrinion
 ```
 
 Acesse `http://SEU_IP:3000` no navegador (funciona no celular) e faça login.
@@ -197,7 +209,10 @@ instalação nova e auto-update).
 
 | Área | Endpoints |
 |---|---|
-| Auth | `POST /api/auth/login` |
+| Auth | `POST /api/auth/login` (captcha + bloqueio por tentativas) |
+| Config pública | `GET /api/config` (site key do captcha) |
+| Empresas | CRUD `/api/companies` + `POST /api/companies/:id/renew` (somente super_admin) · `GET /api/company` (própria empresa, qualquer papel) |
+| Usuários | CRUD `/api/users` + `POST /api/users/:id/unlock` |
 | Telas | `GET/PUT/DELETE /api/devices`, `POST /api/devices/:id/command` |
 | Playlists | CRUD + `PUT /api/playlists/:id/items` + `POST /api/playlists/:id/assign` |
 | Rodapé | CRUD `/api/tickers` + `PUT /api/tickers/:id/devices` |
@@ -213,17 +228,77 @@ instalação nova e auto-update).
 
 ## Segurança
 
-- JWT com expiração de 8 h; papéis admin/manager/viewer
-- Telas novas exigem **aprovação manual** no painel
+- JWT com expiração de 8 h; papéis super_admin/admin/manager/viewer
+- **Multi-tenancy**: cada empresa só vê seus próprios usuários, telas, playlists, mídia,
+  grupos, rodapés, perfis de clima e de layout. `super_admin` enxerga todas as empresas
+  e escolhe a "empresa ativa" no painel para agir em nome dela.
+- **Captcha** (Cloudflare Turnstile) no login — defina `TURNSTILE_SITE_KEY` e
+  `TURNSTILE_SECRET_KEY`; sem elas, o captcha fica desativado (modo dev).
+- **Bloqueio de conta**: 3 senhas erradas seguidas bloqueiam a conta por 3 min; um
+  admin pode desbloquear antes disso na aba Usuários.
+- `JWT_SECRET` é **obrigatório** em produção (`NODE_ENV=production`) — o servidor
+  recusa iniciar sem ele, em vez de cair num segredo previsível.
+- Rate limiting: login (por IP), registro de tela (por IP), manifest/heartbeat (por
+  `device_key`) — ver `express-rate-limit` em `server/src/index.js`.
+- Headers de segurança via `helmet` (CSP ainda desativada — calibrar com o domínio
+  do Turnstile antes de habilitar em produção).
+- Telas novas exigem **aprovação manual** no painel; ao aprovar, a tela passa a
+  pertencer à empresa de quem aprovou (antes disso, fica num pool visível a
+  qualquer admin, sem expor mídia/playlist — só nome, resolução e plataforma).
 - Chave única por dispositivo (`device_key`) gerada localmente
 - Validação de formato e tamanho nos uploads
-- Para acesso fora da LAN: use HTTPS (nginx + certbot) e defina `JWT_SECRET`
+- Para acesso fora da LAN: use HTTPS (nginx + certbot)
+
+**Fora do escopo atual (fast-follow, exige mudança nos players):** `/media` e
+`/backgrounds` ainda são servidos sem checar a empresa do arquivo — os players
+baixam mídia só com `device_key`, sem JWT, então travar isso exige que os players
+passem a mandar `device_key` nessas URLs também. O token do painel também continua
+em `localStorage` (não em cookie httpOnly) — migrar isso é independente do resto e
+pode ser feito depois.
+
+## Assinatura por empresa (comercial)
+
+Cada empresa tem, opcionalmente, uma data de vencimento (`due_date`) e um limite de
+telas (`screen_limit`), configuráveis pelo `super_admin` na aba **Empresas** do painel:
+
+- **Sem gateway de pagamento**: a cobrança é feita por fora (PIX/boleto); o
+  `super_admin` marca a renovação no painel (botão "Renovar +30 dias"/"+1 ano", ou
+  editando a data manualmente), o que também reativa a empresa automaticamente se
+  estava suspensa.
+- **Limite de telas**: ao tentar aprovar uma tela além do `screen_limit` da empresa,
+  a aprovação é recusada com uma mensagem clara. Limite vazio = sem limite.
+- **Vencimento**: quando `due_date` passa da data atual (ou a empresa é suspensa
+  manualmente), login e qualquer ação autenticada do painel passam a retornar erro
+  para todo mundo da empresa, exceto `super_admin` — inclusive para sessões já
+  abertas (o token de até 8h para de funcionar assim que a empresa vence, não só em
+  logins novos). **As telas continuam exibindo o último conteúdo normalmente**: os
+  endpoints do player (`register`/`manifest`/`heartbeat`/WebSocket) autenticam por
+  `device_key`, não por login, e não são afetados.
+- **Aviso por WhatsApp**: um job diário (09h, via `node-cron`) verifica empresas
+  perto do vencimento e manda uma mensagem de WhatsApp para o número cadastrado em
+  cada empresa — um aviso ~3 dias antes, um no dia do vencimento, e um quando já
+  venceu (cada estágio é enviado só uma vez, controlado por `last_reminder_stage`).
+  Fica registrado em `notifications_log` (útil pra comprovar que o aviso saiu).
+
+  Isso depende de uma instância da **[Evolution API](https://github.com/EvolutionAPI/evolution-api)**
+  (self-hosted, grátis) configurada à parte — defina `EVOLUTION_API_URL`,
+  `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE`. Sem essas variáveis, o sistema
+  continua funcionando normalmente — o envio só é pulado e fica registrado como
+  `not_configured` no log. Trocar de provedor (Z-API, Meta Cloud API etc.) é reescrever
+  `server/src/whatsapp.js`, sem tocar no resto do sistema. Para testar sem esperar o
+  horário do cron, defina `CHECK_DUE_ON_BOOT=1` — a checagem roda uma vez assim que
+  o servidor sobe.
 
 ## Roadmap
 
 - [x] **Fase 1 (MVP)**: auth, mídia, playlists, grupos, players Windows/Android, tempo real,
   tema claro/escuro, usuários com permissão por grupo, painel de clima, rodapé de avisos, auto-update
-- [ ] **Fase 2**: agendamentos (horário/dias da semana/prioridade), PostgreSQL, refresh tokens, screenshots ao vivo
+- [x] **Fase 1.5**: rebranding VitriniON, captcha no login, bloqueio de conta por tentativas,
+  multi-tenancy (empresas isoladas + super_admin), hardening (rate limit, helmet, JWT_SECRET obrigatório)
+- [x] **Fase 1.6**: assinatura por empresa (vencimento, limite de telas, bloqueio automático),
+  aviso de vencimento por WhatsApp (Evolution API)
+- [ ] **Fase 2**: agendamentos (horário/dias da semana/prioridade), PostgreSQL, refresh tokens,
+  screenshots ao vivo, `/media`/`/backgrounds` tenant-aware, cookie httpOnly para o token do painel
 - [ ] **Fase 3**: relatórios proof-of-play, transcodificação automática (FFmpeg), multi-tela, alertas de tela offline
 
 ## Licença

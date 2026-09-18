@@ -1,7 +1,7 @@
 {
-  "name": "6signage-server",
-  "version": "1.3.0",
-  "description": "6Signage - Servidor central de Digital Signage (MVP Fase 1)",
+  "name": "vitrinion-server",
+  "version": "1.3.1",
+  "description": "VitriniON - Servidor central de Digital Signage",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -10,8 +10,11 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.6.0",
     "uuid": "^9.0.1",
     "ws": "^8.18.0"
   }

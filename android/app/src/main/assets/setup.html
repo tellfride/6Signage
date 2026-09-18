@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>6Signage — Configurar esta tela</title>
+<title>VitriniON — Configurar esta tela</title>
 <style>
 :root{
   --ink:#0A0D12; --panel:#12171F; --well:#0E131A; --line:#212936;
@@ -44,12 +44,12 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--m
 </style>
 </head>
 <body>
-  <div class="brand"><span class="logo"><i></i></span>6Signage Player</div>
+  <div class="brand"><span class="logo"><i></i></span>VitriniON Player</div>
   <div class="sub">Configurar esta tela</div>
 
   <label for="server">Endereço do servidor</label>
   <input id="server" placeholder="http://10.30.200.200:3000" spellcheck="false">
-  <div class="hint">IP e porta do servidor 6Signage na sua rede.</div>
+  <div class="hint">IP e porta do servidor VitriniON na sua rede.</div>
 
   <label for="name">Nome desta tela</label>
   <input id="name" placeholder="TV_Recepcao" spellcheck="false">
@@ -109,7 +109,7 @@ async function test() {
   if (r.ok) {
     tested = true; btnSave.disabled = false;
     result.className = 'ok';
-    result.textContent = '✓ Servidor 6Signage encontrado' + (r.version ? ' (v' + r.version + ')' : '');
+    result.textContent = '✓ Servidor VitriniON encontrado' + (r.version ? ' (v' + r.version + ')' : '');
   } else {
     tested = false; btnSave.disabled = true;
     result.className = 'err';
