@@ -89,10 +89,12 @@ h3{font-size:15.5px;font-weight:650}
 
 /* ancorado à esquerda, não centralizado: max-width delimita onde o conteúdo
    termina — o resto da largura fica livre para a foto aparecer inteira. */
-#login .login-content{position:relative;z-index:1;flex:1 0 auto;width:100%;max-width:1180px;
-  display:flex;align-items:center;gap:clamp(28px,4vw,64px);flex-wrap:wrap;
+/* o cartão fica fora do fluxo, travado no centro exato da tela (independente
+   do texto) — o texto de marca só ocupa a faixa livre à esquerda dele */
+#login .login-content{position:relative;z-index:1;flex:1 0 auto;width:100%;
+  display:flex;align-items:center;
   padding:clamp(28px,5vh,56px) clamp(24px,5vw,72px)}
-#login .hero-col{flex:0 1 460px;min-width:280px}
+#login .hero-col{flex:0 1 380px;max-width:380px;min-width:240px}
 /* lockup da marca: "Vitrini" + O com play + N */
 #login .brand-lockup{display:flex;align-items:center;font-weight:800;
   letter-spacing:-.03em;line-height:1;font-size:clamp(32px,3.6vw,46px)}
@@ -118,7 +120,8 @@ h3{font-size:15.5px;font-weight:650}
 #login .feature-row span{display:block;font-size:10.5px;color:var(--lg-mut);line-height:1.3;margin-top:1px}
 
 /* cartão de acesso — a borda com brilho azul é a assinatura do cartão */
-#login .login-card{flex:0 0 auto;width:min(400px,100%);display:flex;flex-direction:column;gap:12px;text-align:left;
+#login .login-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(400px,88vw);display:flex;flex-direction:column;gap:12px;text-align:left;
   padding:clamp(24px,2.2vw,30px) clamp(24px,2.2vw,28px);border-radius:24px;
   background:linear-gradient(150deg, rgba(9,26,50,.88), rgba(3,12,26,.88));
   backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
@@ -186,8 +189,11 @@ h3{font-size:15.5px;font-weight:650}
   #login .login-content{flex-direction:column;align-items:center;text-align:center;
     padding:26px 22px 18px;justify-content:flex-start;min-height:100%}
   /* mobile: login primeiro (o cartão já carrega a marca sozinho), o discurso
-     de marketing vem depois, pra quem rolar a tela — não antes da ação */
-  #login .login-card{order:-1;margin-bottom:22px}
+     de marketing vem depois, pra quem rolar a tela — não antes da ação.
+     Sai do position:absolute (que é só para o layout lado a lado) e volta a
+     ser um item normal do empilhamento, na frente via order. */
+  #login .login-card{position:static;left:auto;top:auto;transform:none;order:-1;
+    width:100%;max-width:400px;margin-bottom:22px}
   #login .hero-col{max-width:440px;display:flex;flex-direction:column;align-items:center;text-align:center}
   #login .tagline,#login .feature-row{justify-content:center}
   #login .feature-row li{align-items:center;text-align:center}
